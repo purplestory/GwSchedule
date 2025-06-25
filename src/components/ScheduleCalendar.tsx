@@ -166,6 +166,29 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
     { key: 'vehicleAndOther', label: '차량/기타', mobileLabel: '기타', bgColor: calendarTheme?.categoryLabels.vehicleAndOther },
   ];
   
+  // 담당자별 이니셜 칩 렌더링
+  const renderInitialChip = (staffName?: string) => {
+    if (!staffName) return null;
+    const staff = staffMembers.find(s => s.name === staffName);
+    if (!staff) return null;
+    return (
+      <span style={{
+        display: 'inline-block',
+        minWidth: 22,
+        height: 22,
+        background: staff.color,
+        color: '#fff',
+        borderRadius: '50%',
+        fontSize: '0.85em',
+        fontWeight: 700,
+        textAlign: 'center',
+        lineHeight: '22px',
+        marginRight: 4,
+        verticalAlign: 'middle',
+      }}>{staff.shortName || staff.name[0]}</span>
+    );
+  };
+
   // 일정 텍스트 앞에 담당자별 컬러 점(●) 표시
   const renderStaffDot = (content?: string) => {
     if (!content) return null;
@@ -174,83 +197,36 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
     return <span style={{ display: 'inline-block', marginRight: 4, color: staff.color, fontSize: '1.1em', verticalAlign: 'middle' }}>●</span>;
   };
 
+  // 일정 텍스트에서 담당자 이름 추출
+  const extractStaffName = (content: string) => {
+    const staff = staffMembers.find(s => content.includes(s.name));
+    return staff ? staff.name : undefined;
+  };
+
+  // 여러 일정이 있을 때 각 줄마다 담당자별 점/이니셜 표시
+  const renderMultiLineContent = (content: string, showInitials: boolean) => {
+    const lines = content.split('<br>').map(line => line.trim()).filter(Boolean);
+    return (
+      <>
+        {lines.map((line, idx) => (
+          <div key={idx} style={{ display: 'flex', alignItems: 'center', color: '#222', marginBottom: 2 }}>
+            {showInitials
+              ? renderInitialChip(extractStaffName(line))
+              : renderStaffDot(line)
+            }
+            <span dangerouslySetInnerHTML={{ __html: line }} style={{ color: '#222' }} />
+          </div>
+        ))}
+      </>
+    );
+  };
+
+  // renderCellContent 개선
   const renderCellContent = (daySchedules: ScheduleItem[], categoryKey: keyof ScheduleItem) => {
     if (!daySchedules.length) return null;
-    const schedule = daySchedules[0];
-
-    const content = schedule[categoryKey] as string;
-
-    if (!content) return null;
-
-    if (staffToFilter.length === 0 || staffToFilter.length === staffMembers.length) {
-      const formattedContent = convertContent(content, staffMembers, staffToFilter, showInitials, isMobile);
-      return (
-        <Typography 
-          variant="body1"
-          fontWeight="bold"
-          sx={isMobile ? {
-            width: '100%',
-            textAlign: 'center',
-            fontSize: '0.4rem',
-            lineHeight: 1.6,
-            whiteSpace: 'normal',
-            overflowWrap: 'break-word',
-            minWidth: 0,
-          } : {
-            width: '100%',
-            textAlign: 'center',
-            fontSize: '0.8rem',
-            lineHeight: 1.6,
-            overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: { xs: 5, sm: 'unset' },
-            whiteSpace: 'nowrap',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {renderStaffDot(formattedContent)}
-          <span dangerouslySetInnerHTML={{ __html: formattedContent.replace(/\n/g, '<br />') }} />
-        </Typography>
-      );
-    }
-
-    const filteredContent = extractSelectedStaffContent(content, staffMembers, staffToFilter);
-    if (!filteredContent || filteredContent.trim() === '') {
-      return null;
-    }
-    
-    const formattedContent = convertContent(filteredContent, staffMembers, staffToFilter, showInitials, isMobile);
-    
-    return (
-      <Typography 
-        variant="body1"
-        fontWeight="bold"
-        sx={isMobile ? {
-          width: '100%',
-          textAlign: 'center',
-          fontSize: '0.4rem',
-          lineHeight: 1.6,
-          whiteSpace: 'normal',
-          overflowWrap: 'break-word',
-          minWidth: 0,
-        } : {
-          width: '100%',
-          textAlign: 'center',
-          fontSize: '0.8rem',
-          lineHeight: 1.6,
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitBoxOrient: 'vertical',
-          WebkitLineClamp: { xs: 5, sm: 'unset' },
-          whiteSpace: 'nowrap',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {renderStaffDot(formattedContent)}
-        <span dangerouslySetInnerHTML={{ __html: formattedContent.replace(/\n/g, '<br />') }} />
-      </Typography>
-    );
+    const content = daySchedules.map(s => s[categoryKey]).filter(Boolean).join('<br>');
+    if (!content || content.trim() === '') return null;
+    return renderMultiLineContent(content, showInitials);
   };
 
   // --- table 스타일 ---
@@ -293,7 +269,8 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   const tdStyle: React.CSSProperties = {
     border: isMobile ? `1px solid ${calendarTheme?.cell.border || '#999'}` : `1px solid ${calendarTheme?.cell.border || '#000'}`,
     background: calendarTheme?.cell.background || '#fff',
-    textAlign: 'center',
+    textAlign: 'left',
+    verticalAlign: 'top',
     padding: isMobile ? '2px' : '6px',
     fontSize: isMobile ? '0.4rem' : (calendarTheme?.table.fontSize || '0.8rem'),
     wordBreak: 'break-all',
@@ -302,7 +279,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     height: isMobile ? 'auto' : '40px',
-    color: calendarTheme?.cell.color || '#000',
+    color: '#222',
   };
 
   const categoryLabelTdStyle = (bgColor?: string): React.CSSProperties => ({
