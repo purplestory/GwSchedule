@@ -3,6 +3,7 @@ import { Paper, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, startOfWeek, endOfWeek } from 'date-fns';
 import { ScheduleItem, StaffMember } from '../types';
 import { CalendarTheme } from '../theme';
+import { getHolidaysForMonth, isHoliday, getHolidayName } from '../services/holidayService';
 
 // --- Helper: 동적으로 행 개수 계산 ---
 function getCalendarRowCount(weeks: Date[][], scheduleCategories: any[]) {
@@ -157,7 +158,11 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
     weeks.push(calendarDays.slice(i, i + 7));
   }
   const dayHeaders = ['주일', '월', '화', '수', '목', '금', '토'];
-  const holidays = ['2025-06-06', '2025-06-03'];
+  
+  // 동적 공휴일 계산
+  const holidays = getHolidaysForMonth(year, month);
+  const holidayDates = holidays.map(h => h.date);
+  
   const scheduleCategories: { key: keyof ScheduleItem; label: string, mobileLabel?: string, bgColor?: string }[] = [
     { key: 'schedule', label: '일정', bgColor: calendarTheme?.categoryLabels.schedule },
     { key: 'dailyMeditation', label: '매일씨앗묵상', mobileLabel: '묵상', bgColor: calendarTheme?.categoryLabels.dailyMeditation },
@@ -333,13 +338,14 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                         justifyContent: 'center',
                           gap: '4px',
                           height: '100%',
+                          position: 'relative',
                         }}>
                           <span style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 600,
-                            color: isToday(day) && isMobile ? (calendarTheme?.today.color || '#fff') : (getDay(day) === 0 || holidays.includes(format(day, 'yyyy-MM-dd')) ? (calendarTheme?.holiday.color || theme.palette.error.main) : (calendarTheme?.cell.color || '#222')),
+                            color: isToday(day) && isMobile ? (calendarTheme?.today.color || '#fff') : (getDay(day) === 0 || holidayDates.includes(format(day, 'yyyy-MM-dd')) ? (calendarTheme?.holiday.color || theme.palette.error.main) : (calendarTheme?.cell.color || '#222')),
                             background: isToday(day) && isMobile ? (calendarTheme?.today.background || theme.palette.error.main) : undefined,
                             borderRadius: isToday(day) && isMobile ? '50%' : undefined,
                             width: isToday(day) && isMobile ? 20 : undefined,
@@ -347,6 +353,23 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                             fontSize: isMobile ? '0.8rem' : '1.68rem',
                             lineHeight: 1,
                           }}>{format(day, 'd')}</span>
+                          {/* 공휴일 이름 표시 - 날짜 아래 중앙정렬 */}
+                          {holidayDates.includes(format(day, 'yyyy-MM-dd')) && (
+                            <div style={{
+                              position: 'absolute',
+                              bottom: isMobile ? '1px' : '2px',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              fontSize: isMobile ? '0.25rem' : '0.5rem',
+                              color: calendarTheme?.holiday.color || theme.palette.error.main,
+                              fontWeight: 'bold',
+                              lineHeight: 1,
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {getHolidayName(format(day, 'yyyy-MM-dd'))?.charAt(0)}
+                            </div>
+                          )}
                           {isToday(day) && !isMobile && (
                             <span style={{
                               minWidth: 32, height: 32, background: calendarTheme?.today.background || theme.palette.error.main, color: calendarTheme?.today.color || '#fff', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', lineHeight: 1, boxSizing: 'border-box',

@@ -35,7 +35,7 @@ const ScheduleDetail: React.FC<ScheduleDetailProps> = ({
   };
 
   const renderStaffChips = (content: string) => {
-    if (!content) return <Typography color="textSecondary">없음</Typography>;
+    if (!content) return <Typography sx={{ color: '#666' }}>없음</Typography>;
     
     const staffNames = content.split(',').map(name => name.trim());
     return (

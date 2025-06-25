@@ -803,7 +803,7 @@ const Statistics: React.FC<StatisticsProps> = ({ schedules, staffMembers }) => {
                     <Typography variant="h4" color="primary" fontWeight="bold">
                       {schedules.length}
                     </Typography>
-                    <Typography variant="body2" color="textSecondary" fontWeight="bold">
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#666' }}>
                       총 일정 수
                     </Typography>
                   </Box>
@@ -813,7 +813,7 @@ const Statistics: React.FC<StatisticsProps> = ({ schedules, staffMembers }) => {
                     <Typography variant="h4" color="secondary" fontWeight="bold">
                       {staffMembers.length}
                     </Typography>
-                    <Typography variant="body2" color="textSecondary" fontWeight="bold">
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#666' }}>
                       총 직원 수
                     </Typography>
                   </Box>
@@ -823,7 +823,7 @@ const Statistics: React.FC<StatisticsProps> = ({ schedules, staffMembers }) => {
                     <Typography variant="h4" color="success.main" fontWeight="bold">
                       {meditationStats.summary.length}
                     </Typography>
-                    <Typography variant="body2" color="textSecondary" fontWeight="bold">
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#666' }}>
                       묵상 참여자
                     </Typography>
                   </Box>
@@ -833,7 +833,7 @@ const Statistics: React.FC<StatisticsProps> = ({ schedules, staffMembers }) => {
                     <Typography variant="h4" color="warning.main" fontWeight="bold">
                       {vehicleStats.vehicles.length}
                     </Typography>
-                    <Typography variant="body2" color="textSecondary" fontWeight="bold">
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#666' }}>
                       사용 차량 수
                     </Typography>
                   </Box>

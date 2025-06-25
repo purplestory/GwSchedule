@@ -1,17 +1,20 @@
 import React from 'react';
 import { Box, Grid, Chip, useTheme } from '@mui/material';
 import { StaffMember } from '../types';
+import { CalendarTheme } from '../theme';
 
 interface StaffFilterProps {
   staffMembers: StaffMember[];
   selectedStaff: string[];
   onStaffSelect: (staffName: string) => void;
+  calendarTheme?: CalendarTheme;
 }
 
 const StaffFilter: React.FC<StaffFilterProps> = ({
   staffMembers,
   selectedStaff,
   onStaffSelect,
+  calendarTheme,
 }) => {
   const theme = useTheme();
   // Define the exact order and content for the filter as seen in the image
@@ -30,6 +33,10 @@ const StaffFilter: React.FC<StaffFilterProps> = ({
     orderedStaff.slice(0, 8),
     orderedStaff.slice(8, 16),
   ];
+
+  const isDarkTheme = calendarTheme?.name === '다크';
+  const chipBackground = isDarkTheme ? 'transparent' : '#fff';
+  const chipHoverBackground = isDarkTheme ? 'rgba(255, 255, 255, 0.1)' : '#f0f0f0';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 0, sm: 0.3 }, p: { xs: 1, sm: 0 } }}>
@@ -51,7 +58,7 @@ const StaffFilter: React.FC<StaffFilterProps> = ({
                   fontWeight: 'bold',
                   cursor: 'pointer',
                   color: isSelected ? '#fff' : staff.color,
-                  backgroundColor: isSelected ? staff.color : '#fff',
+                  backgroundColor: isSelected ? staff.color : chipBackground,
                   borderColor: staff.color,
                   '& .MuiChip-label': {
                     width: '100%',
@@ -59,7 +66,7 @@ const StaffFilter: React.FC<StaffFilterProps> = ({
                     padding: '0 2px',
                   },
                   '&:hover': {
-                    backgroundColor: isSelected ? staff.color : '#f0f0f0',
+                    backgroundColor: isSelected ? staff.color : chipHoverBackground,
                     color: isSelected ? '#fff' : staff.color,
                     borderColor: staff.color,
                     opacity: isSelected ? 0.9 : 1,

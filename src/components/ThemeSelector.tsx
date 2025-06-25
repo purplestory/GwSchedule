@@ -20,162 +20,132 @@ import { CalendarTheme, calendarThemes } from '../theme';
 interface ThemeSelectorProps {
   currentTheme: CalendarTheme;
   onThemeChange: (theme: CalendarTheme) => void;
+  open: boolean;
+  onClose: () => void;
 }
 
-const ThemeSelector: React.FC<ThemeSelectorProps> = ({ currentTheme, onThemeChange }) => {
-  const [open, setOpen] = React.useState(false);
-
+const ThemeSelector: React.FC<ThemeSelectorProps> = ({ currentTheme, onThemeChange, open, onClose }) => {
   const handleThemeSelect = (theme: CalendarTheme) => {
     onThemeChange(theme);
-    setOpen(false);
+    onClose();
   };
 
   return (
-    <>
-      <Tooltip title="달력 테마 변경">
-        <IconButton
-          onClick={() => setOpen(true)}
-          sx={{
-            backgroundColor: 'rgba(25, 118, 210, 0.08)',
-            '&:hover': {
-              backgroundColor: 'rgba(25, 118, 210, 0.12)',
-            },
-          }}
-        >
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+    >
+      <DialogTitle>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Palette />
-        </IconButton>
-      </Tooltip>
-
-      <Dialog
-        open={open}
-        onClose={() => setOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Palette />
-            <Typography variant="h6">달력 테마 선택</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2}>
-            {calendarThemes.map((theme) => (
-              <Grid item xs={12} sm={6} md={4} key={theme.name}>
-                <Card
-                  sx={{
-                    cursor: 'pointer',
-                    border: currentTheme.name === theme.name ? '2px solid #1976d2' : '1px solid #e0e0e0',
-                    '&:hover': {
-                      border: '2px solid #1976d2',
-                      boxShadow: 2,
-                    },
-                    position: 'relative',
-                  }}
-                  onClick={() => handleThemeSelect(theme)}
-                >
-                  {currentTheme.name === theme.name && (
+          <Typography variant="h6">달력 테마 선택</Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent>
+        <Grid container spacing={2}>
+          {calendarThemes.map((theme) => (
+            <Grid item xs={12} sm={6} md={4} key={theme.name}>
+              <Card
+                sx={{
+                  cursor: 'pointer',
+                  border: currentTheme.name === theme.name ? '2px solid #1976d2' : '1px solid #e0e0e0',
+                  '&:hover': {
+                    border: '2px solid #1976d2',
+                    boxShadow: 2,
+                  },
+                  position: 'relative',
+                  bgcolor: theme.name === '다크' ? '#23272f' : 'background.paper',
+                  color: theme.name === '다크' ? '#fff' : 'text.primary',
+                }}
+                onClick={() => handleThemeSelect(theme)}
+              >
+                {currentTheme.name === theme.name && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      backgroundColor: '#1976d2',
+                      color: 'white',
+                      borderRadius: '50%',
+                      width: 24,
+                      height: 24,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 1,
+                    }}
+                  >
+                    <Check sx={{ fontSize: 16 }} />
+                  </Box>
+                )}
+                <CardContent sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom fontWeight="bold" sx={{ color: theme.name === '다크' ? '#fff' : 'text.primary' }}>
+                    {theme.name}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 2, color: theme.name === '다크' ? '#ccc' : theme.cell.color }}>
+                    {theme.description}
+                  </Typography>
+                  
+                  {/* 테마 미리보기 */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {/* 날짜 헤더 미리보기 */}
                     <Box
                       sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        backgroundColor: '#1976d2',
-                        color: 'white',
-                        borderRadius: '50%',
-                        width: 24,
-                        height: 24,
+                        height: 20,
+                        backgroundColor: theme.dateHeader.background,
+                        border: `1px solid ${theme.dateHeader.border}`,
+                        borderRadius: 1,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 1,
                       }}
                     >
-                      <Check sx={{ fontSize: 16 }} />
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: theme.dateHeader.color,
+                          fontWeight: theme.dateHeader.fontWeight,
+                        }}
+                      >
+                        날짜
+                      </Typography>
                     </Box>
-                  )}
-                  <CardContent sx={{ p: 2 }}>
-                    <Typography variant="h6" gutterBottom fontWeight="bold">
-                      {theme.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {theme.description}
-                    </Typography>
                     
-                    {/* 테마 미리보기 */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      {/* 헤더 미리보기 */}
-                      <Box
+                    {/* 일정 셀 미리보기 */}
+                    <Box
+                      sx={{
+                        height: 20,
+                        backgroundColor: theme.cell.background,
+                        border: `1px solid ${theme.cell.border}`,
+                        borderRadius: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
                         sx={{
-                          height: 20,
-                          backgroundColor: theme.header.background,
-                          border: `1px solid ${theme.header.border}`,
-                          borderRadius: 1,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                          color: theme.cell.color,
                         }}
                       >
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: theme.header.color,
-                            fontWeight: theme.header.fontWeight,
-                          }}
-                        >
-                          헤더
-                        </Typography>
-                      </Box>
-                      
-                      {/* 셀 미리보기 */}
-                      <Box
-                        sx={{
-                          height: 20,
-                          backgroundColor: theme.cell.background,
-                          border: `1px solid ${theme.cell.border}`,
-                          borderRadius: 1,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: theme.cell.color,
-                          }}
-                        >
-                          셀
-                        </Typography>
-                      </Box>
-                      
-                      {/* 카테고리 색상 미리보기 */}
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        {Object.entries(theme.categoryLabels).map(([key, color]) => (
-                          <Box
-                            key={key}
-                            sx={{
-                              width: 16,
-                              height: 16,
-                              backgroundColor: color,
-                              border: `1px solid ${theme.cell.border}`,
-                              borderRadius: 0.5,
-                            }}
-                          />
-                        ))}
-                      </Box>
+                        일정
+                      </Typography>
                     </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>취소</Button>
-        </DialogActions>
-      </Dialog>
-    </>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>취소</Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 

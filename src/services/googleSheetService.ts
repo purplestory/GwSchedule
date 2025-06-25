@@ -4,7 +4,44 @@ import { ScheduleItem, StaffMember } from '../types';
 // 디버깅 로그 제어 플래그
 const DEBUG_MODE = true;
 
-const GOOGLE_SHEET_HTML_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTopAqdeyxyResdIR-AeREaY5byKtM90QDuHcMIlySta2obCKxZkhP5GhJvUdIZUHeOxl0KpjsWJO96/pubhtml';
+// 기본 구글 스프레드시트 URL (하드코딩된 값)
+const DEFAULT_GOOGLE_SHEET_ID = '2PACX-1vTopAqdeyxyResdIR-AeREaY5byKtM90QDuHcMIlySta2obCKxZkhP5GhJvUdIZUHeOxl0KpjsWJO96';
+
+// 동적 URL을 위한 변수
+let currentGoogleSheetId = DEFAULT_GOOGLE_SHEET_ID;
+
+// URL 생성 함수
+const getGoogleSheetUrls = (sheetId: string = currentGoogleSheetId) => {
+  const baseUrl = `https://docs.google.com/spreadsheets/d/e/${sheetId}`;
+  return {
+    html: `${baseUrl}/pubhtml`,
+    json: `${baseUrl}/gviz/tq?t=json`
+  };
+};
+
+// URL 설정 함수
+export const setGoogleSheetUrl = (url: string) => {
+  try {
+    // URL에서 sheet ID 추출
+    const match = url.match(/\/d\/e\/([^\/]+)/);
+    if (match) {
+      currentGoogleSheetId = match[1];
+      console.log('Google Sheet ID updated:', currentGoogleSheetId);
+      return true;
+    } else {
+      console.error('Invalid Google Sheet URL format');
+      return false;
+    }
+  } catch (error) {
+    console.error('Error setting Google Sheet URL:', error);
+    return false;
+  }
+};
+
+// 현재 URL 가져오기 함수
+export const getCurrentGoogleSheetUrl = () => {
+  return getGoogleSheetUrls().html;
+};
 
 // Final color map based on the user's master schedule image.
 const staffColorMap: { [key: string]: string } = {
@@ -148,295 +185,461 @@ export const getScheduleData = async (): Promise<ScheduleData> => {
     '근무': 'workSchedule', '차량/기타': 'vehicleAndOther',
   };
 
+  // 먼저 HTML 방식으로 시도
   try {
-    console.log('Fetching from Google Sheets URL:', GOOGLE_SHEET_HTML_URL);
-    const response = await fetch(GOOGLE_SHEET_HTML_URL);
+    return await getScheduleDataFromHTML(scheduleRowKeys);
+  } catch (htmlError) {
+    console.warn('HTML 방식 실패, JSON 방식으로 시도:', htmlError);
+    try {
+      return await getScheduleDataFromJSON(scheduleRowKeys);
+    } catch (jsonError) {
+      console.error('JSON 방식도 실패:', jsonError);
+      throw new Error(`데이터를 가져올 수 없습니다. HTML 오류: ${htmlError}, JSON 오류: ${jsonError}`);
+    }
+  }
+};
+
+const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }): Promise<ScheduleData> => {
+  // 캐시 방지를 위한 타임스탬프 추가
+  const timestamp = new Date().getTime();
+  const urlWithCacheBuster = `${getGoogleSheetUrls().html}?t=${timestamp}`;
+  
+  console.log('Fetching from Google Sheets HTML URL:', urlWithCacheBuster);
+  
+  // 더 자세한 오류 처리를 위한 fetch 요청
+  let response;
+  try {
+    response = await fetch(urlWithCacheBuster, {
+      method: 'GET',
+      mode: 'cors' // CORS 모드 명시적 설정
+    });
+  } catch (fetchError) {
+    console.error('Fetch error details:', fetchError);
+    const error = fetchError as Error;
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      throw new Error('네트워크 연결 오류입니다. 인터넷 연결을 확인해주세요.');
+    } else if (error instanceof TypeError && error.message.includes('CORS')) {
+      throw new Error('CORS 오류입니다. 구글 스프레드시트가 올바르게 공개되어 있는지 확인해주세요.');
+    } else {
+      throw new Error(`데이터 가져오기 실패: ${error.message}`);
+    }
+  }
+  
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '응답 내용을 읽을 수 없습니다.');
+    console.error('Response error details:', {
+      status: response.status,
+      statusText: response.statusText,
+      url: response.url,
+      headers: Object.fromEntries(response.headers.entries()),
+      body: errorText.substring(0, 500) // 처음 500자만 로그
+    });
     
-    if (!response.ok) {
+    if (response.status === 403) {
+      throw new Error('접근 권한이 없습니다. 구글 스프레드시트가 공개되어 있는지 확인해주세요.');
+    } else if (response.status === 404) {
+      throw new Error('구글 스프레드시트를 찾을 수 없습니다. URL을 확인해주세요.');
+    } else if (response.status >= 500) {
+      throw new Error('구글 서버 오류입니다. 잠시 후 다시 시도해주세요.');
+    } else {
       throw new Error(`HTTP ${response.status}: ${response.statusText} - Google Sheets 데이터를 가져올 수 없습니다.`);
     }
-    
-    const htmlText = await response.text();
-    console.log('HTML response length:', htmlText.length);
-    
-    if (htmlText.length < 100) {
-      throw new Error('Google Sheets에서 빈 응답을 받았습니다. URL을 확인해주세요.');
-    }
-    
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, 'text/html');
-    const table = doc.querySelector('table');
-    
-    if (!table) {
-      throw new Error('Google Sheets HTML에서 테이블을 찾을 수 없습니다. 시트가 올바르게 공개되어 있는지 확인해주세요.');
-    }
+  }
+  
+  const htmlText = await response.text();
+  console.log('HTML response length:', htmlText.length);
+  console.log('HTML response preview:', htmlText.substring(0, 500));
+  
+  if (htmlText.length < 100) {
+    throw new Error('Google Sheets에서 빈 응답을 받았습니다. URL을 확인해주세요.');
+  }
+  
+  // HTML 내용에 오류 메시지가 포함되어 있는지 확인
+  if (htmlText.includes('Error 404') || htmlText.includes('Not Found')) {
+    throw new Error('구글 스프레드시트를 찾을 수 없습니다. URL을 확인해주세요.');
+  }
+  
+  if (htmlText.includes('Access denied') || htmlText.includes('Permission denied')) {
+    throw new Error('접근 권한이 없습니다. 구글 스프레드시트가 공개되어 있는지 확인해주세요.');
+  }
+  
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlText, 'text/html');
+  const table = doc.querySelector('table');
+  
+  if (!table) {
+    throw new Error('Google Sheets HTML에서 테이블을 찾을 수 없습니다. 시트가 올바르게 공개되어 있는지 확인해주세요.');
+  }
 
-    const rows = Array.from(table.querySelectorAll('tr'));
-    console.log('Found table rows:', rows.length);
-    
-    if (rows.length === 0) {
-      throw new Error('Google Sheets 테이블에 행이 없습니다.');
-    }
+  const rows = Array.from(table.querySelectorAll('tr'));
+  console.log('Found table rows:', rows.length);
+  
+  if (rows.length === 0) {
+    throw new Error('Google Sheets 테이블에 행이 없습니다.');
+  }
 
-    let maxCols = 0;
-    rows.forEach(row => {
-      let currentCols = 0;
-      row.querySelectorAll('td, th').forEach(cell => {
-        currentCols += parseInt(cell.getAttribute('colspan') || '1', 10);
-      });
-      if (currentCols > maxCols) maxCols = currentCols;
+  let maxCols = 0;
+  rows.forEach(row => {
+    let currentCols = 0;
+    row.querySelectorAll('td, th').forEach(cell => {
+      currentCols += parseInt(cell.getAttribute('colspan') || '1', 10);
     });
+    if (currentCols > maxCols) maxCols = currentCols;
+  });
 
-    const htmlGrid: (string | null)[][] = Array.from({ length: rows.length }, () => Array(maxCols).fill(null));
-    const textGrid: (string | null)[][] = Array.from({ length: rows.length }, () => Array(maxCols).fill(null));
+  const htmlGrid: (string | null)[][] = Array.from({ length: rows.length }, () => Array(maxCols).fill(null));
+  const textGrid: (string | null)[][] = Array.from({ length: rows.length }, () => Array(maxCols).fill(null));
 
-    rows.forEach((row, r) => {
-      let c = 0;
-      Array.from(row.querySelectorAll('td, th')).forEach(cell => {
-        while (htmlGrid[r][c] !== null) c++;
-        const rowspan = parseInt(cell.getAttribute('rowspan') || '1', 10);
-        const colspan = parseInt(cell.getAttribute('colspan') || '1', 10);
-        for (let rs = 0; rs < rowspan; rs++) {
-          for (let cs = 0; cs < colspan; cs++) {
-            if (r + rs < rows.length && c + cs < maxCols) {
-              // 서정화 색상 변환: #00ffff -> #008080
-              let cellHtml = cell.innerHTML;
-              cellHtml = cellHtml.replace(/#00ffff/g, '#008080');
-              cellHtml = cellHtml.replace(/color:\s*#00ffff/g, 'color: #008080');
-              cellHtml = cellHtml.replace(/color:\s*#00ffff;/g, 'color: #008080;');
+  rows.forEach((row, r) => {
+    let c = 0;
+    Array.from(row.querySelectorAll('td, th')).forEach(cell => {
+      while (htmlGrid[r][c] !== null) c++;
+      const rowspan = parseInt(cell.getAttribute('rowspan') || '1', 10);
+      const colspan = parseInt(cell.getAttribute('colspan') || '1', 10);
+      for (let rs = 0; rs < rowspan; rs++) {
+        for (let cs = 0; cs < colspan; cs++) {
+          if (r + rs < rows.length && c + cs < maxCols) {
+            // 서정화 색상 변환: #00ffff -> #008080
+            let cellHtml = cell.innerHTML;
+            cellHtml = cellHtml.replace(/#00ffff/g, '#008080');
+            cellHtml = cellHtml.replace(/color:\s*#00ffff/g, 'color: #008080');
+            cellHtml = cellHtml.replace(/color:\s*#00ffff;/g, 'color: #008080;');
+            
+            // CSS 클래스 정보 추가 (Google Sheets 색상 매칭용)
+            const cellClass = cell.getAttribute('class');
+            if (cellClass) {
+              // CSS 클래스 정보를 HTML에 포함시켜 색상 매칭에 활용
+              cellHtml = `<div class="${cellClass}">${cellHtml}</div>`;
               
-              // CSS 클래스 정보 추가 (Google Sheets 색상 매칭용)
-              const cellClass = cell.getAttribute('class');
-              if (cellClass) {
-                // CSS 클래스 정보를 HTML에 포함시켜 색상 매칭에 활용
-                cellHtml = `<div class="${cellClass}">${cellHtml}</div>`;
-                
-                if (DEBUG_MODE && (cellClass.includes('s13') || cellClass.includes('s10') || cellClass.includes('s16'))) {
-                  console.log(`Found CSS class: ${cellClass} in cell [${r}, ${c}]`);
-                  console.log(`Cell content: ${cell.textContent}`);
-                }
+              if (DEBUG_MODE && (cellClass.includes('s13') || cellClass.includes('s10') || cellClass.includes('s16'))) {
+                console.log(`Found CSS class: ${cellClass} in cell [${r}, ${c}]`);
+                console.log(`Cell content: ${cell.textContent}`);
               }
-              
-              // 구글 시트에서 색상 정보를 더 정확하게 추출
-              // 1. 인라인 스타일에서 색상 추출
-              const inlineStyleMatches = cellHtml.match(/style="[^"]*color:\s*([^;"]+)[^"]*"/gi);
-              if (inlineStyleMatches) {
-                // eslint-disable-next-line no-loop-func
-                inlineStyleMatches.forEach(match => {
-                  const colorMatch = match.match(/color:\s*([^;"]+)/i);
-                  if (colorMatch) {
-                    console.log(`Found inline style color: ${colorMatch[1]} in cell [${r}, ${c}]`);
-                  }
-                });
-              }
-              
-              // 2. span 태그의 색상 속성 추출
-              const spanColorMatches = cellHtml.match(/<span[^>]*color:\s*([^;"]+)[^>]*>/gi);
-              if (spanColorMatches) {
-                // eslint-disable-next-line no-loop-func
-                spanColorMatches.forEach(match => {
-                  const colorMatch = match.match(/color:\s*([^;"]+)/i);
-                  if (colorMatch) {
-                    console.log(`Found span color: ${colorMatch[1]} in cell [${r}, ${c}]`);
-                  }
-                });
-              }
-              
-              // 3. 모든 색상 패턴 추출 (디버깅용)
-              const allColorMatches = cellHtml.match(/(?:color|background-color):\s*([^;"]+)/gi);
-              if (allColorMatches && allColorMatches.length > 0) {
-                console.log(`Cell [${r}, ${c}] - All color patterns found:`, allColorMatches);
-              }
-              
-              htmlGrid[r + rs][c + cs] = cellHtml;
-              textGrid[r + rs][c + cs] = cell.textContent;
             }
-          }
-        }
-        c += colspan;
-      });
-    });
-
-    const titleText = doc.querySelector('#sheet-title')?.textContent || '';
-    const month = parseInt(titleText.match(/(\d+)월/)?.[1] || `${new Date().getMonth() + 1}`, 10);
-    const year = parseInt(titleText.match(/(\d{4})년/)?.[1] || `${new Date().getFullYear()}`, 10);
-
-    const staffMembers = parseStaffMembers(textGrid);
-    const scheduleMap = new Map<string, ScheduleItem>();
-
-    const dateRowIndexes = textGrid.reduce<number[]>((acc, row, r) => {
-      if (row.some(cell => cell?.trim() === '날짜')) acc.push(r);
-      return acc;
-    }, []);
-    
-    if (dateRowIndexes.length === 0) throw new Error("Could not find any '날짜' rows.");
-
-    dateRowIndexes.forEach(dateRowIndex => {
-      const categoryCol = textGrid[dateRowIndex].findIndex(cell => cell?.trim() === '날짜');
-      if (categoryCol === -1) return;
-
-      const dayOfWeekRow = textGrid[dateRowIndex - 1];
-      const dateRow = textGrid[dateRowIndex];
-
-      for (let c = categoryCol + 1; c < maxCols; c++) {
-        const day = parseInt(dateRow?.[c]?.trim() || '', 10);
-        if (isNaN(day)) continue;
-        
-        const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-        if (!scheduleMap.has(date)) {
-          scheduleMap.set(date, { id: date, date, dayOfWeek: dayOfWeekRow?.[c]?.trim() || '', schedule: '', dailyMeditation: '', coffeeManagement: '', workSchedule: '', vehicleAndOther: '' });
-        }
-        const scheduleItem = scheduleMap.get(date)!;
-
-        let lastCategoryName: string | null = null;
-        const endRow = dateRowIndexes.find(i => i > dateRowIndex) || rows.length;
-        for (let r = dateRowIndex + 1; r < endRow; r++) {
-          const categoryName = textGrid[r]?.[categoryCol]?.trim();
-          if (categoryName && scheduleRowKeys[categoryName]) {
-            lastCategoryName = categoryName;
-          }
-          
-          if (lastCategoryName) {
-            const key = scheduleRowKeys[lastCategoryName] as keyof ScheduleItem;
-            const html = htmlGrid[r]?.[c]?.trim();
-            const text = textGrid[r]?.[c]?.trim();
-            if (text) {
-                if (scheduleItem[key]) {
-                    (scheduleItem[key] as any) += `<br>${html}`;
-                } else {
-                    (scheduleItem[key] as any) = html;
+            
+            // 구글 시트에서 색상 정보를 더 정확하게 추출
+            // 1. 인라인 스타일에서 색상 추출
+            const inlineStyleMatches = cellHtml.match(/style="[^"]*color:\s*([^;"]+)[^"]*"/gi);
+            if (inlineStyleMatches) {
+              // eslint-disable-next-line no-loop-func
+              inlineStyleMatches.forEach(match => {
+                const colorMatch = match.match(/color:\s*([^;"]+)/i);
+                if (colorMatch) {
+                  console.log(`Found inline style color: ${colorMatch[1]} in cell [${r}, ${c}]`);
                 }
+              });
+            }
+            
+            // 2. span 태그의 색상 속성 추출
+            const spanColorMatches = cellHtml.match(/<span[^>]*color:\s*([^;"]+)[^>]*>/gi);
+            if (spanColorMatches) {
+              // eslint-disable-next-line no-loop-func
+              spanColorMatches.forEach(match => {
+                const colorMatch = match.match(/color:\s*([^;"]+)/i);
+                if (colorMatch) {
+                  console.log(`Found span color: ${colorMatch[1]} in cell [${r}, ${c}]`);
+                }
+              });
+            }
+            
+            // 3. 모든 색상 패턴 추출 (디버깅용)
+            const allColorMatches = cellHtml.match(/(?:color|background-color):\s*([^;"]+)/gi);
+            if (allColorMatches && allColorMatches.length > 0) {
+              console.log(`Cell [${r}, ${c}] - All color patterns found:`, allColorMatches);
+            }
+            
+            htmlGrid[r + rs][c + cs] = cellHtml;
+            textGrid[r + rs][c + cs] = cell.textContent;
+          }
+        }
+      }
+      c += colspan;
+    });
+  });
+
+  const titleText = doc.querySelector('#sheet-title')?.textContent || '';
+  const month = parseInt(titleText.match(/(\d+)월/)?.[1] || `${new Date().getMonth() + 1}`, 10);
+  const year = parseInt(titleText.match(/(\d{4})년/)?.[1] || `${new Date().getFullYear()}`, 10);
+
+  const staffMembers = parseStaffMembers(textGrid);
+  const scheduleMap = new Map<string, ScheduleItem>();
+
+  const dateRowIndexes = textGrid.reduce((acc: number[], row: any[], r: number) => {
+    if (row.some((cell: any) => cell?.trim() === '날짜')) acc.push(r);
+    return acc;
+  }, [] as number[]);
+  
+  if (dateRowIndexes.length === 0) throw new Error("Could not find any '날짜' rows.");
+
+  dateRowIndexes.forEach(dateRowIndex => {
+    const categoryCol = textGrid[dateRowIndex].findIndex(cell => cell?.trim() === '날짜');
+    if (categoryCol === -1) return;
+
+    const dayOfWeekRow = textGrid[dateRowIndex - 1];
+    const dateRow = textGrid[dateRowIndex];
+
+    for (let c = categoryCol + 1; c < maxCols; c++) {
+      const day = parseInt(dateRow?.[c]?.trim() || '', 10);
+      if (isNaN(day)) continue;
+      
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+      if (!scheduleMap.has(date)) {
+        scheduleMap.set(date, { id: date, date, dayOfWeek: dayOfWeekRow?.[c]?.trim() || '', schedule: '', dailyMeditation: '', coffeeManagement: '', workSchedule: '', vehicleAndOther: '' });
+      }
+      const scheduleItem = scheduleMap.get(date)!;
+
+      let lastCategoryName: string | null = null;
+      const endRow = dateRowIndexes.find(i => i > dateRowIndex) || rows.length;
+      for (let r = dateRowIndex + 1; r < endRow; r++) {
+        const categoryName = textGrid[r]?.[categoryCol]?.trim();
+        if (categoryName && scheduleRowKeys[categoryName]) {
+          lastCategoryName = categoryName;
+        }
+        
+        if (lastCategoryName) {
+          const key = scheduleRowKeys[lastCategoryName] as keyof ScheduleItem;
+          const html = htmlGrid[r]?.[c]?.trim();
+          const text = textGrid[r]?.[c]?.trim();
+          if (text) {
+              if (scheduleItem[key]) {
+                  (scheduleItem[key] as any) += `<br>${html}`;
+              } else {
+                  (scheduleItem[key] as any) = html;
+              }
+            
+            const staffField = `${key}Staff` as keyof ScheduleItem;
+            
+            // 특별 처리: 6월 2일 전임교역자 대체휴무
+            if (date === '2025-06-02' && key === 'workSchedule') {
+              const existing = (scheduleItem[staffField] as string[] | undefined) || [];
+              (scheduleItem[staffField] as any) = [...new Set([...existing, ...fullTimeMinisters])];
+              if (DEBUG_MODE) {
+                console.log(`Special case - June 2nd: Added full-time ministers to work schedule: ${fullTimeMinisters.join(', ')}`);
+              }
+            } else {
+              // HTML 태그를 제거하고 순수 텍스트에서 스태프를 찾기
+              const cleanText = text.replace(/<[^>]*>/g, ''); // HTML 태그 제거
               
-              const staffField = `${key}Staff` as keyof ScheduleItem;
+              // 전체 이름과 이니셜 모두에서 스태프 찾기 (날짜 패턴 제외)
+              const newStaff = staffMembers.filter(s => {
+                // 날짜 패턴 (예: 4일, 7일) 제외
+                const datePattern = /^\d+일$/;
+                if (datePattern.test(s.name) || datePattern.test(s.shortName)) {
+                  return false;
+                }
+                
+                // 근무 스케줄에서 특별 처리: 날짜와 스태프 이름 구분
+                if (key === 'workSchedule') {
+                  // 날짜 패턴이 포함된 텍스트는 제외
+                  const dateInText = /\d+일/.test(cleanText);
+                  if (dateInText && (s.name === '이진우' || s.name === '박부환')) {
+                    return false; // 이진우, 박부환은 날짜와 혼동될 수 있음
+                  }
+                  
+                  // 근무 스케줄에서 스태프 이름이 명시적으로 포함된 경우 우선 처리
+                  if (cleanText.includes(s.name)) {
+                    return true;
+                  }
+                }
+                
+                return cleanText.includes(s.name) || (s.shortName && cleanText.includes(s.shortName));
+              }).map(s => s.name);
               
-              // 특별 처리: 6월 2일 전임교역자 대체휴무
-              if (date === '2025-06-02' && key === 'workSchedule') {
-                const existing = (scheduleItem[staffField] as string[] | undefined) || [];
-                (scheduleItem[staffField] as any) = [...new Set([...existing, ...fullTimeMinisters])];
+              // 추가: HTML에서 색상으로 스태프 찾기 (더 정확한 매칭)
+              const htmlStaff = findStaffByColor(html || '', staffMembers);
+              
+              // 근무 스케줄 특별 처리: 색상 우선순위
+              if (key === 'workSchedule') {
+                // 디버깅: 근무 스케줄 HTML 내용 확인
                 if (DEBUG_MODE) {
-                  console.log(`Special case - June 2nd: Added full-time ministers to work schedule: ${fullTimeMinisters.join(', ')}`);
+                  console.log(`=== Work Schedule Debug - Date: ${scheduleItem.date} ===`);
+                  console.log(`  Original HTML: ${html}`);
+                  console.log(`  Clean text: ${cleanText}`);
+                  console.log(`  Name matched staff: ${newStaff.join(', ')}`);
+                  console.log(`  Color matched staff: ${htmlStaff.join(', ')}`);
+                  
+                  // CSS 클래스 정보 확인
+                  if (html && html.includes('class="')) {
+                    const classMatches = html.match(/class="([^"]+)"/g);
+                    console.log(`  CSS Classes found: ${classMatches?.join(', ')}`);
+                  }
+                  
+                  // 특정 색상 클래스 확인
+                  const targetClasses = ['s13', 's10', 's16', 's9', 's17', 's15'];
+                  targetClasses.forEach(cls => {
+                    if (html && html.includes(`class="${cls}"`)) {
+                      console.log(`  ✓ Found target CSS class: ${cls}`);
+                    }
+                  });
+                }
+                
+                // 특별 처리: 사용자가 언급한 날짜들 (4일, 7일, 11일)
+                const specialDates = ['2025-06-04', '2025-06-07', '2025-06-11'];
+                if (specialDates.includes(scheduleItem.date)) {
+                  console.log(`=== SPECIAL DATE PROCESSING: ${scheduleItem.date} ===`);
+                  
+                  // 색상 매칭을 강제로 우선시
+                  if (htmlStaff.length > 0) {
+                    const existing = (scheduleItem[staffField] as string[] | undefined) || [];
+                    (scheduleItem[staffField] as any) = [...new Set([...existing, ...htmlStaff])];
+                    
+                    console.log(`  ✓ Special date color match: ${htmlStaff.join(', ')}`);
+                  } else {
+                    console.log(`  ✗ No color match found for special date ${scheduleItem.date}`);
+                    console.log(`    HTML content: ${html}`);
+                  }
+                } else {
+                  // 일반적인 근무 스케줄 처리
+                  // 근무 스케줄에서는 색상 매칭을 우선시 (색상으로 구분되는 경우가 많음)
+                  if (htmlStaff.length > 0) {
+                    const existing = (scheduleItem[staffField] as string[] | undefined) || [];
+                    (scheduleItem[staffField] as any) = [...new Set([...existing, ...htmlStaff])];
+                    
+                    if (DEBUG_MODE) {
+                      console.log(`Work schedule color match - Date: ${scheduleItem.date}`);
+                      console.log(`  Color matched staff: ${htmlStaff.join(', ')}`);
+                    }
+                  }
+                  // 색상 매칭이 실패한 경우에만 이름 매칭 사용
+                  else if (newStaff.length > 0) {
+                    const existing = (scheduleItem[staffField] as string[] | undefined) || [];
+                    (scheduleItem[staffField] as any) = [...new Set([...existing, ...newStaff])];
+                    
+                    if (DEBUG_MODE) {
+                      console.log(`Work schedule name match - Date: ${scheduleItem.date}`);
+                      console.log(`  Name matched staff: ${newStaff.join(', ')}`);
+                    }
+                  } else if (DEBUG_MODE) {
+                    console.log(`  ✗ No staff matched for work schedule on ${scheduleItem.date}`);
+                    console.log(`    Name matching failed: ${newStaff.length === 0}`);
+                    console.log(`    Color matching failed: ${htmlStaff.length === 0}`);
+                  }
                 }
               } else {
-                // HTML 태그를 제거하고 순수 텍스트에서 스태프를 찾기
-                const cleanText = text.replace(/<[^>]*>/g, ''); // HTML 태그 제거
+                // 이름과 색상으로 찾은 스태프 모두 추가
+                const allFoundStaff = [...new Set([...newStaff, ...htmlStaff])];
                 
-                // 전체 이름과 이니셜 모두에서 스태프 찾기 (날짜 패턴 제외)
-                const newStaff = staffMembers.filter(s => {
-                  // 날짜 패턴 (예: 4일, 7일) 제외
-                  const datePattern = /^\d+일$/;
-                  if (datePattern.test(s.name) || datePattern.test(s.shortName)) {
-                    return false;
-                  }
-                  
-                  // 근무 스케줄에서 특별 처리: 날짜와 스태프 이름 구분
-                  if (key === 'workSchedule') {
-                    // 날짜 패턴이 포함된 텍스트는 제외
-                    const dateInText = /\d+일/.test(cleanText);
-                    if (dateInText && (s.name === '이진우' || s.name === '박부환')) {
-                      return false; // 이진우, 박부환은 날짜와 혼동될 수 있음
-                    }
-                    
-                    // 근무 스케줄에서 스태프 이름이 명시적으로 포함된 경우 우선 처리
-                    if (cleanText.includes(s.name)) {
-                      return true;
-                    }
-                  }
-                  
-                  return cleanText.includes(s.name) || (s.shortName && cleanText.includes(s.shortName));
-                }).map(s => s.name);
-                
-                // 추가: HTML에서 색상으로 스태프 찾기 (더 정확한 매칭)
-                const htmlStaff = findStaffByColor(html || '', staffMembers);
-                
-                // 근무 스케줄 특별 처리: 색상 우선순위
-                if (key === 'workSchedule') {
-                  // 디버깅: 근무 스케줄 HTML 내용 확인
-                  if (DEBUG_MODE) {
-                    console.log(`=== Work Schedule Debug - Date: ${scheduleItem.date} ===`);
-                    console.log(`  Original HTML: ${html}`);
-                    console.log(`  Clean text: ${cleanText}`);
-                    console.log(`  Name matched staff: ${newStaff.join(', ')}`);
-                    console.log(`  Color matched staff: ${htmlStaff.join(', ')}`);
-                    
-                    // CSS 클래스 정보 확인
-                    if (html && html.includes('class="')) {
-                      const classMatches = html.match(/class="([^"]+)"/g);
-                      console.log(`  CSS Classes found: ${classMatches?.join(', ')}`);
-                    }
-                    
-                    // 특정 색상 클래스 확인
-                    const targetClasses = ['s13', 's10', 's16', 's9', 's17', 's15'];
-                    targetClasses.forEach(cls => {
-                      if (html && html.includes(`class="${cls}"`)) {
-                        console.log(`  ✓ Found target CSS class: ${cls}`);
-                      }
-                    });
-                  }
-                  
-                  // 특별 처리: 사용자가 언급한 날짜들 (4일, 7일, 11일)
-                  const specialDates = ['2025-06-04', '2025-06-07', '2025-06-11'];
-                  if (specialDates.includes(scheduleItem.date)) {
-                    console.log(`=== SPECIAL DATE PROCESSING: ${scheduleItem.date} ===`);
-                    
-                    // 색상 매칭을 강제로 우선시
-                    if (htmlStaff.length > 0) {
-                      const existing = (scheduleItem[staffField] as string[] | undefined) || [];
-                      (scheduleItem[staffField] as any) = [...new Set([...existing, ...htmlStaff])];
-                      
-                      console.log(`  ✓ Special date color match: ${htmlStaff.join(', ')}`);
-                    } else {
-                      console.log(`  ✗ No color match found for special date ${scheduleItem.date}`);
-                      console.log(`    HTML content: ${html}`);
-                    }
-                  } else {
-                    // 일반적인 근무 스케줄 처리
-                    // 근무 스케줄에서는 색상 매칭을 우선시 (색상으로 구분되는 경우가 많음)
-                    if (htmlStaff.length > 0) {
-                      const existing = (scheduleItem[staffField] as string[] | undefined) || [];
-                      (scheduleItem[staffField] as any) = [...new Set([...existing, ...htmlStaff])];
-                      
-                      if (DEBUG_MODE) {
-                        console.log(`Work schedule color match - Date: ${scheduleItem.date}`);
-                        console.log(`  Color matched staff: ${htmlStaff.join(', ')}`);
-                      }
-                    }
-                    // 색상 매칭이 실패한 경우에만 이름 매칭 사용
-                    else if (newStaff.length > 0) {
-                      const existing = (scheduleItem[staffField] as string[] | undefined) || [];
-                      (scheduleItem[staffField] as any) = [...new Set([...existing, ...newStaff])];
-                      
-                      if (DEBUG_MODE) {
-                        console.log(`Work schedule name match - Date: ${scheduleItem.date}`);
-                        console.log(`  Name matched staff: ${newStaff.join(', ')}`);
-                      }
-                    } else if (DEBUG_MODE) {
-                      console.log(`  ✗ No staff matched for work schedule on ${scheduleItem.date}`);
-                      console.log(`    Name matching failed: ${newStaff.length === 0}`);
-                      console.log(`    Color matching failed: ${htmlStaff.length === 0}`);
-                    }
-                  }
-                } else {
-                  // 이름과 색상으로 찾은 스태프 모두 추가
-                  const allFoundStaff = [...new Set([...newStaff, ...htmlStaff])];
-                  
-                  if (allFoundStaff.length > 0) {
-                    const existing = (scheduleItem[staffField] as string[] | undefined) || [];
-                    (scheduleItem[staffField] as any) = [...new Set([...existing, ...allFoundStaff])];
-                  }
+                if (allFoundStaff.length > 0) {
+                  const existing = (scheduleItem[staffField] as string[] | undefined) || [];
+                  (scheduleItem[staffField] as any) = [...new Set([...existing, ...allFoundStaff])];
                 }
               }
             }
           }
         }
       }
-    });
+    }
+  });
 
+  const schedules = Array.from(scheduleMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  return { year, month, schedules, staffMembers, textGrid };
+};
+
+const getScheduleDataFromJSON = async (scheduleRowKeys: { [key: string]: any }): Promise<ScheduleData> => {
+  const timestamp = new Date().getTime();
+  const urlWithCacheBuster = `${getGoogleSheetUrls().json}&t=${timestamp}`;
+  
+  console.log('Fetching from Google Sheets JSON URL:', urlWithCacheBuster);
+  
+  const response = await fetch(urlWithCacheBuster, {
+    method: 'GET',
+    mode: 'cors'
+  });
+  
+  if (!response.ok) {
+    throw new Error(`JSON API 오류: HTTP ${response.status}: ${response.statusText}`);
+  }
+  
+  const jsonText = await response.text();
+  
+  // Google Visualization API는 ")]}'"로 시작하는 응답을 반환
+  const cleanJson = jsonText.replace(/^\)\]\}'/, '');
+  
+  try {
+    const data = JSON.parse(cleanJson);
+    
+    if (!data.table || !data.table.rows) {
+      throw new Error('JSON 응답에 테이블 데이터가 없습니다.');
+    }
+    
+    // JSON 데이터를 기존 HTML 파싱 로직과 호환되도록 변환
+    const rows = data.table.rows.map((row: any) => 
+      row.c.map((cell: any) => cell?.v || null)
+    );
+    
+    const titleText = data.table.cols?.[0]?.label || '';
+    const month = parseInt(titleText.match(/(\d+)월/)?.[1] || `${new Date().getMonth() + 1}`, 10);
+    const year = parseInt(titleText.match(/(\d{4})년/)?.[1] || `${new Date().getFullYear()}`, 10);
+    
+    const staffMembers = parseStaffMembers(rows);
+    const scheduleMap = new Map<string, ScheduleItem>();
+    
+    // 기존 HTML 파싱 로직과 동일한 방식으로 스케줄 데이터 처리
+    const dateRowIndexes = rows.reduce((acc: number[], row: any[], r: number) => {
+      if (row.some((cell: any) => cell?.trim() === '날짜')) acc.push(r);
+      return acc;
+    }, [] as number[]);
+    
+    if (dateRowIndexes.length === 0) throw new Error("Could not find any '날짜' rows.");
+    
+    dateRowIndexes.forEach((dateRowIndex: number) => {
+      const categoryCol = rows[dateRowIndex].findIndex((cell: any) => cell?.trim() === '날짜');
+      if (categoryCol === -1) return;
+      
+      const dayOfWeekRow = rows[dateRowIndex - 1];
+      const dateRow = rows[dateRowIndex];
+      
+      for (let c = categoryCol + 1; c < rows[0].length; c++) {
+        const day = parseInt(dateRow?.[c]?.trim() || '', 10);
+        if (isNaN(day)) continue;
+        
+        const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        
+        if (!scheduleMap.has(date)) {
+          scheduleMap.set(date, { 
+            id: date, 
+            date, 
+            dayOfWeek: dayOfWeekRow?.[c]?.trim() || '', 
+            schedule: '', 
+            dailyMeditation: '', 
+            coffeeManagement: '', 
+            workSchedule: '', 
+            vehicleAndOther: '' 
+          });
+        }
+        
+        const scheduleItem = scheduleMap.get(date)!;
+        
+        let lastCategoryName: string | null = null;
+        const endRow = dateRowIndexes.find((i: number) => i > dateRowIndex) || rows.length;
+        
+        for (let r = dateRowIndex + 1; r < endRow; r++) {
+          const categoryName = rows[r]?.[categoryCol]?.trim();
+          if (categoryName && scheduleRowKeys[categoryName]) {
+            lastCategoryName = categoryName;
+          }
+          
+          if (lastCategoryName) {
+            const key = scheduleRowKeys[lastCategoryName] as keyof ScheduleItem;
+            const text = rows[r]?.[c]?.trim();
+            if (text) {
+              if (scheduleItem[key]) {
+                (scheduleItem[key] as any) += `<br>${text}`;
+              } else {
+                (scheduleItem[key] as any) = text;
+              }
+            }
+          }
+        }
+      }
+    });
+    
     const schedules = Array.from(scheduleMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-    return { year, month, schedules, staffMembers, textGrid };
-  } catch (error) {
-    console.error('Error in getScheduleData:', error);
-    throw error;
+    return { year, month, schedules, staffMembers, textGrid: rows };
+    
+  } catch (parseError) {
+    throw new Error(`JSON 파싱 오류: ${parseError}`);
   }
 };
 
@@ -654,4 +857,20 @@ const findStaffByColor = (htmlContent: string, staffMembers: StaffMember[]): str
   }
   
   return foundStaff;
+};
+
+// 시트(탭) 목록을 반환하는 함수 (HTML 파싱 기반)
+export const getSheetTabList = async (): Promise<{ name: string; gid: string }[]> => {
+  const timestamp = new Date().getTime();
+  const urlWithCacheBuster = `${getGoogleSheetUrls().html}?t=${timestamp}`;
+  const response = await fetch(urlWithCacheBuster, { method: 'GET', mode: 'cors' });
+  if (!response.ok) throw new Error('시트 목록을 가져올 수 없습니다.');
+  const htmlText = await response.text();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlText, 'text/html');
+  const tabNodes = Array.from(doc.querySelectorAll('#sheet-menu li a'));
+  return tabNodes.map(a => ({
+    name: a.textContent?.trim() || '',
+    gid: (a as HTMLAnchorElement).getAttribute('href')?.match(/gid=(\d+)/)?.[1] || ''
+  })).filter(tab => tab.name && tab.gid);
 }; 
