@@ -170,9 +170,8 @@ const Statistics: React.FC<StatisticsProps> = ({ schedules, staffMembers }) => {
     Object.entries(vacationStats).forEach(([staffName, vacations]) => {
       totalVacationDays[staffName] = Object.entries(vacations)
         .reduce((sum, [type, count]) => {
-          // 반차는 0.5일로 계산, 나머지는 1일로 계산
-          const dayValue = type === '반차' ? count * 0.5 : count;
-          return sum + dayValue;
+          // count는 이미 올바른 값으로 계산됨 (반차는 0.5, 나머지는 1)
+          return sum + count;
         }, 0);
     });
     
