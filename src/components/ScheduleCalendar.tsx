@@ -166,14 +166,6 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
     { key: 'vehicleAndOther', label: '차량/기타', mobileLabel: '기타', bgColor: calendarTheme?.categoryLabels.vehicleAndOther },
   ];
   
-  // 일정 텍스트 앞에 담당자별 컬러 점(●) 표시
-  const renderStaffDot = (content?: string) => {
-    if (!content) return null;
-    const staff = staffMembers.find(s => content.includes(s.name));
-    if (!staff) return null;
-    return <span style={{ display: 'inline-block', marginRight: 4, color: staff.color, fontSize: '1.1em', verticalAlign: 'middle' }}>●</span>;
-  };
-
   const renderCellContent = (daySchedules: ScheduleItem[], categoryKey: keyof ScheduleItem) => {
     if (!daySchedules.length) return null;
     const schedule = daySchedules[0];
@@ -188,6 +180,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
         <Typography 
           variant="body1"
           fontWeight="bold"
+          dangerouslySetInnerHTML={{ __html: formattedContent.replace(/\n/g, '<br />') }}
           sx={isMobile ? {
             width: '100%',
             textAlign: 'center',
@@ -208,10 +201,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
             whiteSpace: 'nowrap',
             textOverflow: 'ellipsis',
           }}
-        >
-          {renderStaffDot(formattedContent)}
-          <span dangerouslySetInnerHTML={{ __html: formattedContent.replace(/\n/g, '<br />') }} />
-        </Typography>
+        />
       );
     }
 
@@ -226,6 +216,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
       <Typography 
         variant="body1"
         fontWeight="bold"
+        dangerouslySetInnerHTML={{ __html: formattedContent.replace(/\n/g, '<br />') }}
         sx={isMobile ? {
           width: '100%',
           textAlign: 'center',
@@ -246,10 +237,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
           whiteSpace: 'nowrap',
           textOverflow: 'ellipsis',
         }}
-      >
-        {renderStaffDot(formattedContent)}
-        <span dangerouslySetInnerHTML={{ __html: formattedContent.replace(/\n/g, '<br />') }} />
-      </Typography>
+      />
     );
   };
 
@@ -260,9 +248,6 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
     tableLayout: 'auto',
     background: calendarTheme?.table.background || '#fff',
     fontSize: isMobile ? '0.4rem' : (calendarTheme?.table.fontSize || '0.8rem'),
-    border: `${calendarTheme?.table.borderWidth || '1px'} solid ${calendarTheme?.table.borderColor || '#000'}`,
-    borderRadius: calendarTheme?.table.borderRadius || '0',
-    boxShadow: calendarTheme?.table.boxShadow || 'none',
   };
   const thStyle: React.CSSProperties = {
     border: isMobile ? `1px solid ${calendarTheme?.header.border || '#999'}` : `1px solid ${calendarTheme?.header.border || '#000'}`,
@@ -322,7 +307,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   };
   
   return (
-    <Paper elevation={0} sx={{ width: '100%', overflow: 'hidden', borderRadius: calendarTheme?.table.borderRadius || 0, borderTop: `${calendarTheme?.table.borderWidth || '2px'} solid ${calendarTheme?.table.borderColor || '#000'}`, borderBottom: `${calendarTheme?.table.borderWidth || '2px'} solid ${calendarTheme?.table.borderColor || '#000'}`, p: 0, boxShadow: calendarTheme?.table.boxShadow || 'none' }}>
+    <Paper elevation={0} sx={{ width: '100%', overflow: 'hidden', borderRadius: 0, borderTop: '2px solid #000', borderBottom: '2px solid #000', p: 0 }}>
       <div style={{ width: '100%', overflowX: 'auto' }}>
         <table style={tableStyle}>
           <thead>

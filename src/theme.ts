@@ -7,10 +7,6 @@ export interface CalendarTheme {
   table: {
     background: string;
     fontSize: string;
-    borderColor?: string;
-    borderWidth?: string;
-    borderRadius?: string;
-    boxShadow?: string;
   };
   header: {
     background: string;
@@ -60,10 +56,6 @@ export const calendarThemes: CalendarTheme[] = [
     table: {
       background: '#fff',
       fontSize: '0.8rem',
-      borderColor: '#000',
-      borderWidth: '2px',
-      borderRadius: '0',
-      boxShadow: 'none',
     },
     header: {
       background: '#c8e6c9',
@@ -110,10 +102,6 @@ export const calendarThemes: CalendarTheme[] = [
     table: {
       background: '#ffffff',
       fontSize: '0.8rem',
-      borderColor: '#e0e0e0',
-      borderWidth: '1px',
-      borderRadius: '0',
-      boxShadow: 'none',
     },
     header: {
       background: '#2196f3',
@@ -160,10 +148,6 @@ export const calendarThemes: CalendarTheme[] = [
     table: {
       background: '#2d2d2d',
       fontSize: '0.8rem',
-      borderColor: '#555555',
-      borderWidth: '1px',
-      borderRadius: '0',
-      boxShadow: 'none',
     },
     header: {
       background: '#424242',
@@ -210,10 +194,6 @@ export const calendarThemes: CalendarTheme[] = [
     table: {
       background: '#fefefe',
       fontSize: '0.8rem',
-      borderColor: '#e1bee7',
-      borderWidth: '1px',
-      borderRadius: '0',
-      boxShadow: 'none',
     },
     header: {
       background: '#ffb3d9',
@@ -260,10 +240,6 @@ export const calendarThemes: CalendarTheme[] = [
     table: {
       background: '#ffffff',
       fontSize: '0.8rem',
-      borderColor: '#bdc3c7',
-      borderWidth: '1px',
-      borderRadius: '0',
-      boxShadow: 'none',
     },
     header: {
       background: '#2c3e50',
