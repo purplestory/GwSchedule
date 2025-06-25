@@ -1,3 +1,7 @@
+// import ical from 'ical';
+// import fetch from 'cross-fetch';
+import ICAL from 'ical.js';
+
 // 한국 공휴일 계산 서비스
 export interface Holiday {
   date: string; // YYYY-MM-DD 형식
@@ -151,4 +155,48 @@ export async function fetchHolidaysFromAPI(year: number): Promise<Holiday[]> {
   
   // API 실패 시 기본 계산 사용
   return getHolidaysForYear(year);
+}
+
+// 구글 한국 공휴일 iCal 주소
+const GOOGLE_KOREA_HOLIDAY_ICAL_URL =
+  'https://calendar.google.com/calendar/ical/ko.south_korea%23holiday%40group.v.calendar.google.com/public/basic.ics';
+
+// 구글 캘린더에서 ICS를 파싱해 Holiday[]로 반환 (브라우저 호환)
+export async function fetchHolidaysFromGoogleCalendar(year: number): Promise<Holiday[]> {
+  const res = await fetch(GOOGLE_KOREA_HOLIDAY_ICAL_URL);
+  const icsText = await res.text();
+  const jcalData = ICAL.parse(icsText);
+  const comp = new ICAL.Component(jcalData);
+  const vevents = comp.getAllSubcomponents('vevent');
+  const holidays: Holiday[] = [];
+  vevents.forEach(event => {
+    const icalEvent = new ICAL.Event(event);
+    const start = icalEvent.startDate.toJSDate();
+    const eventYear = start.getFullYear();
+    if (eventYear === year) {
+      holidays.push({
+        date: start.toISOString().split('T')[0],
+        name: icalEvent.summary,
+        type: 'national',
+      });
+    }
+  });
+  return holidays;
+}
+
+// 공공데이터포털 공휴일 API 연동
+const PUBLIC_API_KEY = 'TBiho9RXa7y35nloACESFPqhcC%2FowvG0gZCtywSZBkujWRm%2FSwb0HHZnU45w2w9G6lkX%2FR8F3fcDZuh%2ByM1NCw%3D%3D';
+const PUBLIC_API_URL = 'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo';
+
+export async function fetchHolidaysFromPublicAPI(year: number, month: number): Promise<Holiday[]> {
+  const yyyymm = `${year}${month.toString().padStart(2, '0')}`;
+  const url = `${PUBLIC_API_URL}?ServiceKey=${PUBLIC_API_KEY}&solYear=${year}&solMonth=${month.toString().padStart(2, '0')}&_type=json`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const items = data.response?.body?.items?.item || [];
+  return (Array.isArray(items) ? items : [items]).filter(Boolean).map((item: any) => ({
+    date: item.locdate ? `${item.locdate}`.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : '',
+    name: item.dateName,
+    type: item.isHoliday === 'Y' ? 'national' : 'temporary',
+  }));
 } 

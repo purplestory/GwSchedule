@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Paper, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, startOfWeek, endOfWeek } from 'date-fns';
 import { ScheduleItem, StaffMember } from '../types';
 import { CalendarTheme } from '../theme';
-import { getHolidaysForMonth, isHoliday, getHolidayName } from '../services/holidayService';
+import { getHolidaysForMonth, isHoliday, getHolidayName, fetchHolidaysFromPublicAPI, Holiday } from '../services/holidayService';
 
 // --- Helper: 동적으로 행 개수 계산 ---
 function getCalendarRowCount(weeks: Date[][], scheduleCategories: any[]) {
@@ -159,9 +159,13 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   }
   const dayHeaders = ['주일', '월', '화', '수', '목', '금', '토'];
   
-  // 동적 공휴일 계산
-  const holidays = getHolidaysForMonth(year, month);
-  const holidayDates = holidays.map(h => h.date);
+  // 공공데이터포털 공휴일 상태
+  const [publicHolidays, setPublicHolidays] = useState<Holiday[]>([]);
+  useEffect(() => {
+    fetchHolidaysFromPublicAPI(year, month).then(setPublicHolidays);
+  }, [year, month]);
+  const holidayDates = publicHolidays.map(h => h.date);
+  const getPublicHolidayName = (date: string) => publicHolidays.find(h => h.date === date)?.name || null;
   
   const scheduleCategories: { key: keyof ScheduleItem; label: string, mobileLabel?: string, bgColor?: string }[] = [
     { key: 'schedule', label: '일정', bgColor: calendarTheme?.categoryLabels.schedule },
@@ -296,13 +300,21 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   };
 
   const categoryLabelTdStyle = (bgColor?: string): React.CSSProperties => ({
-    ...tdStyle,
-    background: bgColor || calendarTheme?.cell.background || '#fff',
+    background: '#f2f2f2',
+    border: '1px solid #e0e0e0',
     fontWeight: 700,
     textAlign: 'center',
     width: isMobile ? 40 : 80,
     minWidth: 30,
     maxWidth: 120,
+    fontSize: isMobile ? '0.4rem' : (calendarTheme?.table.fontSize || '0.8rem'),
+    color: '#000',
+    height: isMobile ? '30px' : '40px',
+    boxSizing: 'border-box',
+    padding: isMobile ? '2px' : '6px',
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
   });
   const dateTdStyle: React.CSSProperties = {
     ...tdStyle,
@@ -331,49 +343,49 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                   <th style={dateThStyle}>날짜</th>
                   {week.map((day, dayIdx) => (
                     <th key={format(day, 'T') + '-date'} style={dateThStyle}>
-                  {isSameMonth(day, monthStart) && (
-                        <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                          gap: '4px',
-                          height: '100%',
-                          position: 'relative',
-                        }}>
+                      {isSameMonth(day, monthStart) && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minHeight: isMobile ? 32 : 48,
+                            position: 'relative',
+                          }}
+                        >
                           <span style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 600,
-                            color: isToday(day) && isMobile ? (calendarTheme?.today.color || '#fff') : (getDay(day) === 0 || holidayDates.includes(format(day, 'yyyy-MM-dd')) ? (calendarTheme?.holiday.color || theme.palette.error.main) : (calendarTheme?.cell.color || '#222')),
-                            background: isToday(day) && isMobile ? (calendarTheme?.today.background || theme.palette.error.main) : undefined,
-                            borderRadius: isToday(day) && isMobile ? '50%' : undefined,
-                            width: isToday(day) && isMobile ? 20 : undefined,
-                            height: isToday(day) && isMobile ? 20 : undefined,
-                            fontSize: isMobile ? '0.8rem' : '1.68rem',
+                            color: isToday(day)
+                              ? '#fff'
+                              : (getDay(day) === 0 || holidayDates.includes(format(day, 'yyyy-MM-dd'))
+                                ? 'rgb(255,0,0)'
+                                : '#222'),
+                            background: isToday(day) ? '#ff0000' : undefined,
+                            borderRadius: isToday(day) ? '50%' : undefined,
+                            width: isToday(day) ? 36 : undefined,
+                            height: isToday(day) ? 36 : undefined,
+                            fontSize: isMobile ? '0.8rem' : '1.344rem',
                             lineHeight: 1,
+                            boxSizing: 'border-box',
+                            transition: 'all 0.2s',
                           }}>{format(day, 'd')}</span>
-                          {/* 공휴일 이름 표시 - 날짜 아래 중앙정렬 */}
+                          {/* 공휴일명 표시 */}
                           {holidayDates.includes(format(day, 'yyyy-MM-dd')) && (
-                            <div style={{
-                              position: 'absolute',
-                              bottom: isMobile ? '1px' : '2px',
-                              left: '50%',
-                              transform: 'translateX(-50%)',
-                              fontSize: isMobile ? '0.25rem' : '0.5rem',
-                              color: calendarTheme?.holiday.color || theme.palette.error.main,
-                              fontWeight: 'bold',
-                              lineHeight: 1,
+                            <span style={{
+                              fontSize: isMobile ? '0.55rem' : '0.7rem',
+                              color: 'rgb(255,0,0)',
+                              marginTop: 2,
+                              fontWeight: 500,
                               textAlign: 'center',
+                              lineHeight: 1.1,
                               whiteSpace: 'nowrap',
                             }}>
-                              {getHolidayName(format(day, 'yyyy-MM-dd'))?.charAt(0)}
-                            </div>
-                          )}
-                          {isToday(day) && !isMobile && (
-                            <span style={{
-                              minWidth: 32, height: 32, background: calendarTheme?.today.background || theme.palette.error.main, color: calendarTheme?.today.color || '#fff', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', lineHeight: 1, boxSizing: 'border-box',
-                            }}>오늘</span>
+                              {getPublicHolidayName(format(day, 'yyyy-MM-dd'))}
+                            </span>
                           )}
                         </div>
                       )}
