@@ -1,14 +1,42 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ThemeProvider, createTheme, CssBaseline, AppBar, Toolbar, Typography, Container, Box, IconButton, Drawer, List, ListItem, ListItemIcon, ListItemText, useMediaQuery, Button, Collapse } from '@mui/material';
-import { CalendarMonth, BarChart, Menu, Fullscreen, FullscreenExit, Assessment, TextFormat, FilterList, Refresh } from '@mui/icons-material';
+import {
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  AppBar,
+  Toolbar,
+  Typography,
+  Container,
+  Box,
+  IconButton,
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  useMediaQuery,
+  Button,
+  Collapse,
+  Chip,
+  FormControlLabel,
+  Switch,
+  Paper,
+  Grid,
+  CircularProgress,
+} from '@mui/material';
+import { CalendarMonth, BarChart, Menu, Fullscreen, FullscreenExit, Assessment, TextFormat, FilterList, Refresh, Visibility, VisibilityOff } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ko } from 'date-fns/locale';
 import { format } from 'date-fns';
 import ScheduleCalendar from './components/ScheduleCalendar';
-import Statistics from './components/Statistics';
+import ScheduleDetail from './components/ScheduleDetail';
 import StaffFilter from './components/StaffFilter';
-import { getScheduleData, ScheduleData } from './services/googleSheetService';
+import Statistics from './components/Statistics';
+import ThemeSelector from './components/ThemeSelector';
+import { ScheduleData, ScheduleItem, StaffMember } from './types';
+import { getScheduleData } from './services/googleSheetService';
+import { defaultCalendarTheme, CalendarTheme } from './theme';
 import { useTheme } from '@mui/material/styles';
 
 const theme = createTheme({
@@ -31,6 +59,8 @@ function App() {
   const [showFilter, setShowFilter] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedSchedule, setSelectedSchedule] = useState<ScheduleItem | null>(null);
+  const [calendarTheme, setCalendarTheme] = useState<CalendarTheme>(defaultCalendarTheme);
 
   const getUpdateInterval = useCallback(() => {
     const hour = new Date().getHours();
@@ -203,7 +233,7 @@ function App() {
                   size="small"
                   title="데이터 새로고침"
                 >
-                  <Refresh sx={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+                  {isRefreshing ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
                 </IconButton>
 
                 {/* Filter Icon */}
@@ -239,6 +269,12 @@ function App() {
 
               {/* Desktop Buttons */}
               <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center' }}>
+                {/* 테마 선택기 */}
+                <ThemeSelector 
+                  currentTheme={calendarTheme}
+                  onThemeChange={setCalendarTheme}
+                />
+                
                 {/* Manual Refresh Button */}
                 <IconButton 
                   color="inherit" 
@@ -247,7 +283,7 @@ function App() {
                   sx={{ mr: 1 }}
                   title="데이터 새로고침"
                 >
-                  <Refresh sx={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+                  {isRefreshing ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
                 </IconButton>
 
                 {/* Initials Toggle */}
@@ -307,14 +343,42 @@ function App() {
                 />
               </Collapse>
 
-              <ScheduleCalendar
-                schedules={schedules}
-                year={year}
-                month={month}
-                staffMembers={staffMembers}
-                staffToFilter={staffToFilter}
-                showInitials={showInitials}
-              />
+              <Paper sx={{ p: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                  <Typography variant="h5" fontWeight="bold">
+                    {year}년 {month}월
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={showInitials}
+                          onChange={(e) => setShowInitials(e.target.checked)}
+                          size="small"
+                        />
+                      }
+                      label="이니셜 표시"
+                      sx={{ '& .MuiFormControlLabel-label': { fontSize: '0.875rem' } }}
+                    />
+                    <Chip
+                      label={`현재 테마: ${calendarTheme.name}`}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </Box>
+                </Box>
+                
+                <ScheduleCalendar
+                  schedules={schedules}
+                  year={year}
+                  month={month}
+                  staffMembers={staffMembers}
+                  staffToFilter={staffToFilter}
+                  showInitials={showInitials}
+                  calendarTheme={calendarTheme}
+                />
+              </Paper>
             </Collapse>
           </Container>
         </Box>

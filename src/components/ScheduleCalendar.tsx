@@ -2,6 +2,7 @@ import React from 'react';
 import { Paper, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, startOfWeek, endOfWeek } from 'date-fns';
 import { ScheduleItem, StaffMember } from '../types';
+import { CalendarTheme } from '../theme';
 
 // --- Helper: 동적으로 행 개수 계산 ---
 function getCalendarRowCount(weeks: Date[][], scheduleCategories: any[]) {
@@ -132,6 +133,7 @@ interface ScheduleCalendarProps {
   staffMembers: StaffMember[];
   staffToFilter?: string[];
   showInitials: boolean;
+  calendarTheme?: CalendarTheme;
 }
 
 const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
@@ -141,6 +143,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   staffMembers,
   staffToFilter = [],
   showInitials,
+  calendarTheme,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -156,11 +159,11 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   const dayHeaders = ['주일', '월', '화', '수', '목', '금', '토'];
   const holidays = ['2025-06-06', '2025-06-03'];
   const scheduleCategories: { key: keyof ScheduleItem; label: string, mobileLabel?: string, bgColor?: string }[] = [
-    { key: 'schedule', label: '일정', bgColor: '#ffffff' },
-    { key: 'dailyMeditation', label: '매일씨앗묵상', mobileLabel: '묵상', bgColor: '#faf8f0' },
-    { key: 'coffeeManagement', label: '커피관리', mobileLabel: '커피', bgColor: '#ffffff' },
-    { key: 'workSchedule', label: '근무', bgColor: '#f1f8e9' },
-    { key: 'vehicleAndOther', label: '차량/기타', mobileLabel: '기타', bgColor: '#ffffff' },
+    { key: 'schedule', label: '일정', bgColor: calendarTheme?.categoryLabels.schedule },
+    { key: 'dailyMeditation', label: '매일씨앗묵상', mobileLabel: '묵상', bgColor: calendarTheme?.categoryLabels.dailyMeditation },
+    { key: 'coffeeManagement', label: '커피관리', mobileLabel: '커피', bgColor: calendarTheme?.categoryLabels.coffeeManagement },
+    { key: 'workSchedule', label: '근무', bgColor: calendarTheme?.categoryLabels.workSchedule },
+    { key: 'vehicleAndOther', label: '차량/기타', mobileLabel: '기타', bgColor: calendarTheme?.categoryLabels.vehicleAndOther },
   ];
   
   const renderCellContent = (daySchedules: ScheduleItem[], categoryKey: keyof ScheduleItem) => {
@@ -243,52 +246,53 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
     width: '100%',
     borderCollapse: 'collapse',
     tableLayout: 'auto',
-    background: '#fff',
-    fontSize: isMobile ? '0.4rem' : '0.8rem',
+    background: calendarTheme?.table.background || '#fff',
+    fontSize: isMobile ? '0.4rem' : (calendarTheme?.table.fontSize || '0.8rem'),
   };
   const thStyle: React.CSSProperties = {
-    border: isMobile ? '1px solid #999' : '1px solid #000',
-    background: '#c8e6c9',
-    fontWeight: 900,
+    border: isMobile ? `1px solid ${calendarTheme?.header.border || '#999'}` : `1px solid ${calendarTheme?.header.border || '#000'}`,
+    background: calendarTheme?.header.background || '#c8e6c9',
+    fontWeight: calendarTheme?.header.fontWeight || 900,
     textAlign: 'center',
     padding: isMobile ? '2px' : '6px',
-    fontSize: isMobile ? '0.4rem' : '0.8rem',
+    fontSize: isMobile ? '0.4rem' : (calendarTheme?.table.fontSize || '0.8rem'),
     whiteSpace: 'nowrap',
     height: isMobile ? '30px' : '40px',
+    color: calendarTheme?.header.color || '#000',
   };
   const dateThStyle: React.CSSProperties = {
     ...thStyle,
-    background: '#f5f5f5',
-    borderTop: isMobile ? '2px solid #000' : '3px solid #000',
-    borderBottom: isMobile ? '2px solid #000' : '3px solid #000',
-    fontWeight: 700,
+    background: calendarTheme?.dateHeader.background || '#f5f5f5',
+    border: isMobile ? `1px solid ${calendarTheme?.dateHeader.border || '#999'}` : `1px solid ${calendarTheme?.dateHeader.border || '#000'}`,
+    fontWeight: calendarTheme?.dateHeader.fontWeight || 700,
     height: isMobile ? '30px' : '40px',
   };
   const labelThStyle: React.CSSProperties = {
     ...thStyle,
-    background: '#f5f5f5',
-    fontWeight: 700,
+    background: calendarTheme?.labelHeader.background || '#f5f5f5',
+    fontWeight: calendarTheme?.labelHeader.fontWeight || 700,
     width: isMobile ? 40 : 80,
     minWidth: 30,
     maxWidth: 120,
   };
   const tdStyle: React.CSSProperties = {
-    border: isMobile ? '1px solid #999' : '1px solid #000',
-    background: '#fff',
+    border: isMobile ? `1px solid ${calendarTheme?.cell.border || '#999'}` : `1px solid ${calendarTheme?.cell.border || '#000'}`,
+    background: calendarTheme?.cell.background || '#fff',
     textAlign: 'center',
     padding: isMobile ? '2px' : '6px',
-    fontSize: isMobile ? '0.4rem' : '0.8rem',
+    fontSize: isMobile ? '0.4rem' : (calendarTheme?.table.fontSize || '0.8rem'),
     wordBreak: 'break-all',
     minWidth: 0,
     whiteSpace: isMobile ? 'normal' : 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     height: isMobile ? 'auto' : '40px',
+    color: calendarTheme?.cell.color || '#000',
   };
 
   const categoryLabelTdStyle = (bgColor?: string): React.CSSProperties => ({
     ...tdStyle,
-    background: bgColor || '#fff',
+    background: bgColor || calendarTheme?.cell.background || '#fff',
     fontWeight: 700,
     textAlign: 'center',
     width: isMobile ? 40 : 80,
@@ -297,10 +301,9 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   });
   const dateTdStyle: React.CSSProperties = {
     ...tdStyle,
-    background: '#f5f5f5',
+    background: calendarTheme?.dateHeader.background || '#f5f5f5',
     fontWeight: 700,
-    borderTop: isMobile ? '2px solid #000' : '2px solid #000',
-    borderBottom: isMobile ? '2px solid #000' : '2px solid #000',
+    border: isMobile ? `1px solid ${calendarTheme?.dateHeader.border || '#999'}` : `1px solid ${calendarTheme?.dateHeader.border || '#000'}`,
   };
   
   return (
@@ -311,7 +314,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
             <tr>
               <th style={thStyle}>요일</th>
               {dayHeaders.map((day, idx) => (
-                <th key={day} style={{ ...thStyle, color: idx === 0 ? theme.palette.error.main : undefined }}>{day}</th>
+                <th key={day} style={{ ...thStyle, color: idx === 0 ? (calendarTheme?.weekend.color || theme.palette.error.main) : undefined }}>{day}</th>
               ))}
             </tr>
           </thead>
@@ -336,8 +339,8 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontWeight: 600,
-                            color: isToday(day) && isMobile ? '#fff' : (getDay(day) === 0 || holidays.includes(format(day, 'yyyy-MM-dd')) ? theme.palette.error.main : '#222'),
-                            background: isToday(day) && isMobile ? theme.palette.error.main : undefined,
+                            color: isToday(day) && isMobile ? (calendarTheme?.today.color || '#fff') : (getDay(day) === 0 || holidays.includes(format(day, 'yyyy-MM-dd')) ? (calendarTheme?.holiday.color || theme.palette.error.main) : (calendarTheme?.cell.color || '#222')),
+                            background: isToday(day) && isMobile ? (calendarTheme?.today.background || theme.palette.error.main) : undefined,
                             borderRadius: isToday(day) && isMobile ? '50%' : undefined,
                             width: isToday(day) && isMobile ? 20 : undefined,
                             height: isToday(day) && isMobile ? 20 : undefined,
@@ -346,7 +349,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                           }}>{format(day, 'd')}</span>
                           {isToday(day) && !isMobile && (
                             <span style={{
-                              minWidth: 32, height: 32, background: theme.palette.error.main, color: '#fff', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', lineHeight: 1, boxSizing: 'border-box',
+                              minWidth: 32, height: 32, background: calendarTheme?.today.background || theme.palette.error.main, color: calendarTheme?.today.color || '#fff', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', lineHeight: 1, boxSizing: 'border-box',
                             }}>오늘</span>
                           )}
                         </div>
@@ -364,7 +367,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                       const scheduleForDay = schedules.filter(s => s.date === format(day, 'yyyy-MM-dd'));
                       const isOtherMonth = !isSameMonth(day, monthStart);
                   return (
-                        <td key={format(day, 'T') + '-' + category.key} style={{ ...tdStyle, background: category.bgColor || '#fff', opacity: isOtherMonth ? 0.3 : 1 }}>
+                        <td key={format(day, 'T') + '-' + category.key} style={{ ...tdStyle, background: category.bgColor || calendarTheme?.cell.background || '#fff', opacity: isOtherMonth ? 0.3 : 1 }}>
                           {renderCellContent(scheduleForDay, category.key)}
                         </td>
                   );
