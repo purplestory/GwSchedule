@@ -208,7 +208,7 @@ function App() {
           <AppBar position="static" color="default" elevation={0} sx={{ bgcolor: 'background.paper', flexShrink: 0 }}>
             <Toolbar sx={{ pr: { xs: 0, sm: undefined } }}>
               <Typography variant="h5" component="h1" sx={{ flexGrow: 1, fontWeight: 700 }}>
-                {isMobile ? `${year}년도 ${month}월 계획` : `${year}년 월간 계획`}
+                {isMobile ? `${year}년 ${month}월 계획` : `${year}년 계획`}
               </Typography>
               
               {/* Last Update Info */}
@@ -346,7 +346,7 @@ function App() {
               <Paper sx={{ p: 2 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
                   <Typography variant="h5" fontWeight="bold">
-                    {year}년 {month}월
+                    {/* {year}년 {month}월 */}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                     <FormControlLabel
