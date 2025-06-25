@@ -18,6 +18,7 @@ export interface CalendarTheme {
     background: string;
     border: string;
     fontWeight: number;
+    color: string;
   };
   labelHeader: {
     background: string;
@@ -66,6 +67,7 @@ export const calendarThemes: CalendarTheme[] = [
       background: '#f5f5f5',
       border: '#000',
       fontWeight: 700,
+      color: '#222',
     },
     labelHeader: {
       background: '#f5f5f5',
@@ -105,12 +107,13 @@ export const calendarThemes: CalendarTheme[] = [
       background: '#2196f3',
       border: '#e0e0e0',
       fontWeight: 600,
-      color: '#ffffff',
+      color: '#222',
     },
     dateHeader: {
       background: '#f8f9fa',
       border: '#e0e0e0',
       fontWeight: 600,
+      color: '#222',
     },
     labelHeader: {
       background: '#f8f9fa',
@@ -156,6 +159,7 @@ export const calendarThemes: CalendarTheme[] = [
       background: '#3a3a3a',
       border: '#555555',
       fontWeight: 600,
+      color: '#fff',
     },
     labelHeader: {
       background: '#3a3a3a',
@@ -195,12 +199,13 @@ export const calendarThemes: CalendarTheme[] = [
       background: '#ffb3d9',
       border: '#ff80ab',
       fontWeight: 600,
-      color: '#ffffff',
+      color: '#222',
     },
     dateHeader: {
       background: '#f8f4ff',
       border: '#e1bee7',
       fontWeight: 600,
+      color: '#222',
     },
     labelHeader: {
       background: '#f8f4ff',
@@ -240,12 +245,13 @@ export const calendarThemes: CalendarTheme[] = [
       background: '#2c3e50',
       border: '#34495e',
       fontWeight: 700,
-      color: '#ffffff',
+      color: '#222',
     },
     dateHeader: {
       background: '#ecf0f1',
       border: '#bdc3c7',
       fontWeight: 700,
+      color: '#222',
     },
     labelHeader: {
       background: '#ecf0f1',
