@@ -385,31 +385,28 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                           }}>{format(day, 'd')}</span>
                           {/* 공휴일명 표시 */}
                           {holidayDates.includes(format(day, 'yyyy-MM-dd')) && (
-                            <span style={{
-                              fontSize: isMobile ? '0.4rem' : '0.7rem',
-                              color: 'rgb(255,0,0)',
-                              marginTop: 2,
-                              fontWeight: 500,
-                              textAlign: 'center',
-                              lineHeight: 1.1,
-                              whiteSpace: 'pre-line',
-                            }}>
-                              {(() => {
-                                const name = getPublicHolidayName(format(day, 'yyyy-MM-dd'));
-                                if (!name) return null;
-                                const idx = name.indexOf('(');
-                                if (idx > 0) {
-                                  return (
-                                    <>
-                                      {name.slice(0, idx).trim()}
-                                      {'\n'}
-                                      {name.slice(idx)}
-                                    </>
-                                  );
-                                }
-                                return name;
-                              })()}
-                            </span>
+                            <span
+                              style={{
+                                fontSize: isMobile ? '0.4rem' : '0.7rem',
+                                color: 'rgb(255,0,0)',
+                                marginTop: 2,
+                                fontWeight: 500,
+                                textAlign: 'center',
+                                lineHeight: 1.1,
+                                whiteSpace: 'normal',
+                              }}
+                              dangerouslySetInnerHTML={{
+                                __html: (() => {
+                                  const name = getPublicHolidayName(format(day, 'yyyy-MM-dd'));
+                                  if (!name) return '';
+                                  const idx = name.indexOf('(');
+                                  if (idx > 0) {
+                                    return name.slice(0, idx).trim() + '<br/>' + name.slice(idx);
+                                  }
+                                  return name;
+                                })(),
+                              }}
+                            />
                           )}
                         </div>
                       )}

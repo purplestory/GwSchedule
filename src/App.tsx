@@ -241,6 +241,45 @@ function App() {
       <ThemeProvider theme={theme}>
         <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ko}>
           <CssBaseline />
+          <Dialog
+            open={settingsOpen}
+            onClose={() => handleSetSettingsOpen(false)}
+            maxWidth="sm"
+            fullWidth
+            disablePortal={false}
+          >
+            <DialogTitle>구글 스프레드시트 URL 설정</DialogTitle>
+            <DialogContent>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                파일 &gt; 공유 &gt; <strong>웹에 게시</strong> 메뉴를 선택 후<br />
+                <strong>전체 문서</strong> 풀다운 메뉴를 눌러서 공유를 원하는 월을 선택하고,<br />
+                오른쪽 풀다운 메뉴에서 <strong>웹페이지</strong>를 선택한 뒤<br />
+                <strong>게시</strong> 버튼을 눌러서 나오는 주소를 복사해 아래 URL 입력창에 붙여넣으세요.<br />
+                <br />
+                예시: https://docs.google.com/spreadsheets/d/e/.../pubhtml?gid=518662115&single=true
+              </Typography>
+              <TextField
+                autoFocus
+                margin="dense"
+                id="googleSheetUrl"
+                label="구글 스프레드시트 URL"
+                type="url"
+                fullWidth
+                value={googleSheetUrl}
+                onChange={(e) => setGoogleSheetUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/e/.../pubhtml?gid=...&single=true"
+                helperText="웹에 게시된 해당 월(시트) URL을 입력하세요"
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => handleSetSettingsOpen(false)} color="primary">
+                취소
+              </Button>
+              <Button onClick={handleSaveGoogleSheetUrl} color="primary">
+                저장
+              </Button>
+            </DialogActions>
+          </Dialog>
           {mainContent}
         </LocalizationProvider>
       </ThemeProvider>
@@ -255,7 +294,13 @@ function App() {
     <ThemeProvider theme={theme}>
       <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ko}>
         <CssBaseline />
-        <Dialog open={settingsOpen} onClose={() => handleSetSettingsOpen(false)} maxWidth="sm" fullWidth>
+        <Dialog
+          open={settingsOpen}
+          onClose={() => handleSetSettingsOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          disablePortal={false}
+        >
           <DialogTitle>구글 스프레드시트 URL 설정</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
