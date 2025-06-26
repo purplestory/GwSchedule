@@ -392,9 +392,23 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                               fontWeight: 500,
                               textAlign: 'center',
                               lineHeight: 1.1,
-                              whiteSpace: 'nowrap',
+                              whiteSpace: 'pre-line',
                             }}>
-                              {getPublicHolidayName(format(day, 'yyyy-MM-dd'))}
+                              {(() => {
+                                const name = getPublicHolidayName(format(day, 'yyyy-MM-dd'));
+                                if (!name) return null;
+                                const idx = name.indexOf('(');
+                                if (idx > 0) {
+                                  return (
+                                    <>
+                                      {name.slice(0, idx).trim()}
+                                      {'\n'}
+                                      {name.slice(idx)}
+                                    </>
+                                  );
+                                }
+                                return name;
+                              })()}
                             </span>
                           )}
                         </div>
