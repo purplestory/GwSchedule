@@ -168,7 +168,7 @@ export const calendarThemes: CalendarTheme[] = [
     cell: {
       background: '#23272f',
       border: '#444',
-      color: '#fff',
+      color: '#e6e6e6',
     },
     categoryLabels: {
       schedule: '#23272f',

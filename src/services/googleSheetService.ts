@@ -15,7 +15,8 @@ const getGoogleSheetUrls = (sheetId: string = currentGoogleSheetId) => {
   const baseUrl = `https://docs.google.com/spreadsheets/d/e/${sheetId}`;
   return {
     html: `${baseUrl}/pubhtml`,
-    json: `${baseUrl}/gviz/tq?t=json`
+    json: `${baseUrl}/gviz/tq?t=json`,
+    api: `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/`
   };
 };
 
@@ -178,31 +179,47 @@ export interface ScheduleData {
     textGrid: (string | null)[][];
 }
 
-export const getScheduleData = async (): Promise<ScheduleData> => {
+export const getScheduleData = async (gid?: string): Promise<ScheduleData> => {
+  if (!currentGoogleSheetId) {
+    throw new Error('구글 시트 URL이 설정되지 않았습니다. URL을 입력해주세요.');
+  }
+
   type WritableScheduleKeys = 'schedule' | 'dailyMeditation' | 'coffeeManagement' | 'workSchedule' | 'vehicleAndOther';
   const scheduleRowKeys: { [key: string]: WritableScheduleKeys } = {
     '일정': 'schedule', '매일씨앗묵상': 'dailyMeditation', '커피관리': 'coffeeManagement',
     '근무': 'workSchedule', '차량/기타': 'vehicleAndOther',
   };
 
-  // 먼저 HTML 방식으로 시도
+  // 먼저 CSV 방식으로 시도 (가장 안정적)
   try {
-    return await getScheduleDataFromHTML(scheduleRowKeys);
+    console.log('CSV 방식으로 데이터 가져오기 시도...');
+    return await getScheduleDataFromCSV(scheduleRowKeys, gid);
+  } catch (csvError) {
+    console.warn('CSV 방식 실패, HTML 방식으로 시도:', csvError);
+    try {
+      return await getScheduleDataFromHTML(scheduleRowKeys, gid);
   } catch (htmlError) {
     console.warn('HTML 방식 실패, JSON 방식으로 시도:', htmlError);
     try {
       return await getScheduleDataFromJSON(scheduleRowKeys);
     } catch (jsonError) {
-      console.error('JSON 방식도 실패:', jsonError);
-      throw new Error(`데이터를 가져올 수 없습니다. HTML 오류: ${htmlError}, JSON 오류: ${jsonError}`);
+        console.error('모든 방식 실패:', { csvError, htmlError, jsonError });
+        throw new Error(`데이터를 가져올 수 없습니다. CSV 오류: ${csvError}, HTML 오류: ${htmlError}, JSON 오류: ${jsonError}`);
+      }
     }
   }
 };
 
-const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }): Promise<ScheduleData> => {
+const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }, gid?: string): Promise<ScheduleData> => {
   // 캐시 방지를 위한 타임스탬프 추가
   const timestamp = new Date().getTime();
-  const urlWithCacheBuster = `${getGoogleSheetUrls().html}?t=${timestamp}`;
+  const randomId = Math.random().toString(36).substring(7);
+  let urlWithCacheBuster: string;
+  if (gid) {
+    urlWithCacheBuster = `${getGoogleSheetUrls().html}?gid=${gid}&t=${timestamp}&r=${randomId}`;
+  } else {
+    urlWithCacheBuster = `${getGoogleSheetUrls().html}?t=${timestamp}&r=${randomId}`;
+  }
   
   console.log('Fetching from Google Sheets HTML URL:', urlWithCacheBuster);
   
@@ -211,7 +228,7 @@ const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }):
   try {
     response = await fetch(urlWithCacheBuster, {
       method: 'GET',
-      mode: 'cors' // CORS 모드 명시적 설정
+      mode: 'cors'
     });
   } catch (fetchError) {
     console.error('Fetch error details:', fetchError);
@@ -265,8 +282,8 @@ const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }):
   
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlText, 'text/html');
-  const table = doc.querySelector('table');
-  
+  let table: HTMLTableElement | null;
+  table = doc.querySelector('table');
   if (!table) {
     throw new Error('Google Sheets HTML에서 테이블을 찾을 수 없습니다. 시트가 올바르게 공개되어 있는지 확인해주세요.');
   }
@@ -289,6 +306,12 @@ const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }):
 
   const htmlGrid: (string | null)[][] = Array.from({ length: rows.length }, () => Array(maxCols).fill(null));
   const textGrid: (string | null)[][] = Array.from({ length: rows.length }, () => Array(maxCols).fill(null));
+
+  // 디버깅: 모든 행의 내용을 먼저 출력
+  if (DEBUG_MODE) {
+    console.log('==== 전체 시트 구조 분석 ====');
+    console.log(`총 행 수: ${rows.length}, 최대 열 수: ${maxCols}`);
+  }
 
   rows.forEach((row, r) => {
     let c = 0;
@@ -357,19 +380,166 @@ const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }):
     });
   });
 
+  // 디버깅: 파싱된 텍스트 그리드의 모든 행 출력
+  if (DEBUG_MODE) {
+    console.log('\n==== 파싱된 텍스트 그리드 전체 내용 ====');
+    for (let r = 0; r < Math.min(20, textGrid.length); r++) {
+      const row = textGrid[r];
+      if (row) {
+        const rowContent = row.map((cell, c) => {
+          const cellText = cell || '';
+          return `[${c}]: "${cellText}"`;
+        }).join(' | ');
+        console.log(`행 ${r}: ${rowContent}`);
+        
+        // "날짜" 텍스트가 포함된 행 찾기
+        const hasDate = row.some(cell => cell && cell.trim() === '날짜');
+        if (hasDate) {
+          console.log(`  ✓ 행 ${r}에서 "날짜" 발견!`);
+        }
+        
+        // 다른 가능한 키워드들도 확인
+        const keywords = ['일정', '요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'];
+        keywords.forEach(keyword => {
+          if (row.some(cell => cell && cell.includes(keyword))) {
+            console.log(`  ✓ 행 ${r}에서 "${keyword}" 발견!`);
+          }
+        });
+      }
+    }
+  }
+
+  // 즉시 디버깅: textGrid가 제대로 채워졌는지 확인
+  console.log('\n==== 즉시 디버깅: textGrid 상태 확인 ====');
+  console.log('textGrid 길이:', textGrid.length);
+  console.log('textGrid[0] 길이:', textGrid[0]?.length);
+  console.log('textGrid[0] 내용:', textGrid[0]);
+  console.log('textGrid[1] 내용:', textGrid[1]);
+  console.log('textGrid[2] 내용:', textGrid[2]);
+  console.log('textGrid[3] 내용:', textGrid[3]);
+  console.log('textGrid[4] 내용:', textGrid[4]);
+  console.log('textGrid[5] 내용:', textGrid[5]);
+
+  // 월/년 파싱 개선
   const titleText = doc.querySelector('#sheet-title')?.textContent || '';
-  const month = parseInt(titleText.match(/(\d+)월/)?.[1] || `${new Date().getMonth() + 1}`, 10);
-  const year = parseInt(titleText.match(/(\d{4})년/)?.[1] || `${new Date().getFullYear()}`, 10);
+  console.log('Sheet title text:', titleText);
+  
+  // 다양한 패턴으로 월/년 추출 시도
+  let month = 0;
+  let year = 0;
+  
+  // 패턴 1: "2025년 7월" 형식
+  const pattern1 = titleText.match(/(\d{4})년\s*(\d{1,2})월/);
+  if (pattern1) {
+    year = parseInt(pattern1[1], 10);
+    month = parseInt(pattern1[2], 10);
+    console.log(`Pattern 1 matched: ${year}년 ${month}월`);
+  }
+  
+  // 패턴 2: "7월" 형식 (년도는 현재 년도 사용)
+  if (!month) {
+    const monthPattern = titleText.match(/(\d{1,2})월/);
+    if (monthPattern) {
+      month = parseInt(monthPattern[1], 10);
+      year = new Date().getFullYear();
+      console.log(`Pattern 2 matched: ${year}년 ${month}월`);
+    }
+  }
+  
+  // 패턴 3: 테이블 내용에서 월/년 찾기
+  if (!month || !year) {
+    for (let r = 0; r < Math.min(5, textGrid.length); r++) {
+      const row = textGrid[r];
+      if (row) {
+        const rowText = row.join(' ');
+        console.log(`Row ${r} text: ${rowText}`);
+        
+        // "2025년 7월" 패턴
+        const yearMonthPattern = rowText.match(/(\d{4})년\s*(\d{1,2})월/);
+        if (yearMonthPattern) {
+          year = parseInt(yearMonthPattern[1], 10);
+          month = parseInt(yearMonthPattern[2], 10);
+          console.log(`Pattern 3 matched in row ${r}: ${year}년 ${month}월`);
+          break;
+        }
+        
+        // "7월" 패턴
+        const monthOnlyPattern = rowText.match(/(\d{1,2})월/);
+        if (monthOnlyPattern && !month) {
+          month = parseInt(monthOnlyPattern[1], 10);
+          year = new Date().getFullYear();
+          console.log(`Pattern 4 matched in row ${r}: ${year}년 ${month}월`);
+        }
+      }
+    }
+  }
+  
+  // 기본값 설정
+  if (!month) {
+    month = new Date().getMonth() + 1;
+    console.log(`Using default month: ${month}`);
+  }
+  if (!year) {
+    year = new Date().getFullYear();
+    console.log(`Using default year: ${year}`);
+  }
+  
+  console.log(`Final parsed: ${year}년 ${month}월`);
 
   const staffMembers = parseStaffMembers(textGrid);
   const scheduleMap = new Map<string, ScheduleItem>();
+
+  try {
+    console.log('\n==== 일정 파싱 시작 ====');
 
   const dateRowIndexes = textGrid.reduce((acc: number[], row: any[], r: number) => {
     if (row.some((cell: any) => cell?.trim() === '날짜')) acc.push(r);
     return acc;
   }, [] as number[]);
   
-  if (dateRowIndexes.length === 0) throw new Error("Could not find any '날짜' rows.");
+    // 디버깅: 모든 행에서 "날짜" 검색
+    if (DEBUG_MODE) {
+      console.log('==== 날짜 행 검색 디버깅 ====');
+      console.log('전체 행 수:', textGrid.length);
+      
+      for (let r = 0; r < Math.min(20, textGrid.length); r++) {
+        const row = textGrid[r];
+        if (row) {
+          const rowString = row.join(' | ');
+          console.log(`행 ${r}: ${rowString}`);
+          
+          // "날짜" 포함 여부 확인
+          const hasDate = row.some((cell: any) => cell?.trim() === '날짜');
+          if (hasDate) {
+            console.log(`✓ 행 ${r}에서 "날짜" 발견!`);
+          }
+        }
+      }
+      
+      console.log('발견된 날짜 행 인덱스:', dateRowIndexes);
+    }
+    
+    if (dateRowIndexes.length === 0) {
+      console.error('날짜 행을 찾을 수 없습니다. 시트 구조를 확인해주세요.');
+      console.error('시트의 첫 번째 열에 "날짜"라는 텍스트가 있는 행이 있어야 합니다.');
+      
+      // 추가 디버깅: 모든 행에서 "날짜"와 유사한 텍스트 검색
+      console.log('\n==== 모든 행에서 "날짜" 관련 텍스트 검색 ====');
+      for (let r = 0; r < Math.min(20, textGrid.length); r++) {
+        const row = textGrid[r];
+        if (row) {
+          row.forEach((cell, c) => {
+            if (cell && typeof cell === 'string') {
+              if (cell.includes('날') || cell.includes('일') || cell.includes('Date') || cell.includes('date')) {
+                console.log(`행 ${r}, 열 ${c}: "${cell}"`);
+              }
+            }
+          });
+        }
+      }
+      
+      throw new Error("Could not find any '날짜' rows.");
+    }
 
   dateRowIndexes.forEach(dateRowIndex => {
     const categoryCol = textGrid[dateRowIndex].findIndex(cell => cell?.trim() === '날짜');
@@ -378,34 +548,113 @@ const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }):
     const dayOfWeekRow = textGrid[dateRowIndex - 1];
     const dateRow = textGrid[dateRowIndex];
 
+      // 디버깅: 인덱스 및 행 내용 출력
+      if (DEBUG_MODE) {
+        console.log('==== 날짜/요일 매칭 디버깅 ====');
+        console.log('categoryCol:', categoryCol);
+        console.log('dayOfWeekRow:', dayOfWeekRow);
+        console.log('dateRow:', dateRow);
     for (let c = categoryCol + 1; c < maxCols; c++) {
-      const day = parseInt(dateRow?.[c]?.trim() || '', 10);
-      if (isNaN(day)) continue;
-      
+          console.log(`열 ${c}: 요일='${dayOfWeekRow?.[c]}' 날짜='${dateRow?.[c]}'`);
+        }
+      }
+
+      for (let c = categoryCol + 1; c < maxCols; c++) {
+        const dayText = dateRow?.[c]?.trim() || '';
+        const day = parseInt(dayText.replace('일', ''), 10);
+        
+        // 디버깅: 날짜 셀 내용 확인
+        if (DEBUG_MODE) {
+          console.log(`날짜 셀 [${dateRowIndex}, ${c}]: "${dayText}" (파싱 결과: ${day})`);
+          
+          // HTML 내용도 확인
+          const htmlContent = htmlGrid[dateRowIndex]?.[c];
+          if (htmlContent) {
+            console.log(`  HTML 내용: ${htmlContent}`);
+          }
+        }
+        
+        if (isNaN(day)) {
+          if (DEBUG_MODE) {
+            console.log(`  → 날짜가 유효하지 않음: "${dayText}"`);
+            
+            // 빈 셀이 아닌 경우 다른 형식 확인
+            if (dayText) {
+              console.log(`  → 다른 형식의 날짜일 수 있음: "${dayText}"`);
+            }
+          }
+          continue;
+        }
+
+        // 요일 매칭: 해당 열의 요일 텍스트 사용
+        const dayOfWeek = dayOfWeekRow?.[c]?.trim() || '';
+        
+        // 실제 날짜로 요일 계산하여 검증
       const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const actualDate = new Date(date);
+        const actualDayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][actualDate.getDay()];
+        
+        // 요일 검증 및 수정
+        let finalDayOfWeek = dayOfWeek;
+        if (dayOfWeek && dayOfWeek !== actualDayOfWeek) {
+          console.log(`⚠️ 요일 불일치: ${day}일 - 표시된 요일: ${dayOfWeek}, 실제 요일: ${actualDayOfWeek}`);
+          console.log(`   표에서 읽은 요일: "${dayOfWeek}"`);
+          console.log(`   실제 계산된 요일: "${actualDayOfWeek}"`);
+          
+          // 요일이 명확하지 않은 경우 실제 요일 사용
+          if (!['일', '월', '화', '수', '목', '금', '토'].includes(dayOfWeek)) {
+            finalDayOfWeek = actualDayOfWeek;
+            console.log(`   → 실제 요일로 수정: ${finalDayOfWeek}`);
+          }
+        }
+        
+        if (DEBUG_MODE) {
+          console.log(`매칭: ${day}일 → ${finalDayOfWeek} (표: ${dayOfWeek}, 실제: ${actualDayOfWeek})`);
+        }
 
       if (!scheduleMap.has(date)) {
-        scheduleMap.set(date, { id: date, date, dayOfWeek: dayOfWeekRow?.[c]?.trim() || '', schedule: '', dailyMeditation: '', coffeeManagement: '', workSchedule: '', vehicleAndOther: '' });
+          scheduleMap.set(date, { id: date, date, dayOfWeek: finalDayOfWeek, schedule: '', dailyMeditation: '', coffeeManagement: '', workSchedule: '', vehicleAndOther: '' });
       }
       const scheduleItem = scheduleMap.get(date)!;
 
       let lastCategoryName: string | null = null;
       const endRow = dateRowIndexes.find(i => i > dateRowIndex) || rows.length;
+        
+        // 디버깅: 일정 파싱 과정 추적
+        if (DEBUG_MODE) {
+          console.log(`\n==== 일정 파싱 시작: ${date} (${day}일) ====`);
+          console.log(`시작 행: ${dateRowIndex + 1}, 끝 행: ${endRow}`);
+        }
+        
       for (let r = dateRowIndex + 1; r < endRow; r++) {
         const categoryName = textGrid[r]?.[categoryCol]?.trim();
         if (categoryName && scheduleRowKeys[categoryName]) {
           lastCategoryName = categoryName;
+            if (DEBUG_MODE) {
+              console.log(`  카테고리 발견: ${categoryName} (행 ${r})`);
+            }
         }
         
         if (lastCategoryName) {
           const key = scheduleRowKeys[lastCategoryName] as keyof ScheduleItem;
           const html = htmlGrid[r]?.[c]?.trim();
           const text = textGrid[r]?.[c]?.trim();
+            
+            if (DEBUG_MODE && (text || html)) {
+              console.log(`  행 ${r}, 열 ${c}: ${lastCategoryName} (${key})`);
+              console.log(`    텍스트: "${text}"`);
+              console.log(`    HTML: "${html?.substring(0, 100)}..."`);
+            }
+            
           if (text) {
               if (scheduleItem[key]) {
                   (scheduleItem[key] as any) += `<br>${html}`;
               } else {
                   (scheduleItem[key] as any) = html;
+                }
+              
+              if (DEBUG_MODE) {
+                console.log(`    ✓ 일정 추가됨: ${key} = "${text}"`);
               }
             
             const staffField = `${key}Staff` as keyof ScheduleItem;
@@ -534,6 +783,10 @@ const getScheduleDataFromHTML = async (scheduleRowKeys: { [key: string]: any }):
 
   const schedules = Array.from(scheduleMap.values()).sort((a, b) => a.date.localeCompare(b.date));
   return { year, month, schedules, staffMembers, textGrid };
+  } catch (parseError) {
+    console.error('일정 파싱 중 오류 발생:', parseError);
+    throw new Error(`일정 파싱 오류: ${parseError}`);
+  }
 };
 
 const getScheduleDataFromJSON = async (scheduleRowKeys: { [key: string]: any }): Promise<ScheduleData> => {
@@ -591,7 +844,8 @@ const getScheduleDataFromJSON = async (scheduleRowKeys: { [key: string]: any }):
       const dateRow = rows[dateRowIndex];
       
       for (let c = categoryCol + 1; c < rows[0].length; c++) {
-        const day = parseInt(dateRow?.[c]?.trim() || '', 10);
+        const dayText = dateRow?.[c]?.trim() || '';
+        const day = parseInt(dayText.replace('일', ''), 10);
         if (isNaN(day)) continue;
         
         const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -744,123 +998,28 @@ const findStaffByColor = (htmlContent: string, staffMembers: StaffMember[]): str
       `style="color: ${staff.color}"`,
       `style="color:${staff.color};"`,
       `style="color: ${staff.color};"`,
-      // span 태그 패턴
-      `<span[^>]*color:${staff.color}[^>]*>`,
-      `<span[^>]*color: ${staff.color}[^>]*>`,
-      `<span[^>]*color:#${colorHex}[^>]*>`,
-      `<span[^>]*color: #${colorHex}[^>]*>`,
-      // 대소문자 변형
-      `color:${staff.color.toLowerCase()}`,
-      `color: ${staff.color.toLowerCase()}`,
-      `color:${staff.color.toUpperCase()}`,
-      `color: ${staff.color.toUpperCase()}`,
+      `style="color:#${colorHex}"`,
+      `style="color: #${colorHex}"`,
+      `style="color:#${colorHex.toLowerCase()}"`,
+      `style="color: #${colorHex.toLowerCase()}"`,
     ];
     
-    // 색상 매칭 확인
-    let hasColor = false;
-    let matchedPatterns: string[] = [];
-    
-    // 1. 인라인 스타일 패턴 확인
     colorPatterns.forEach(pattern => {
-      if (htmlContent.toLowerCase().includes(pattern.toLowerCase())) {
-        hasColor = true;
-        matchedPatterns.push(pattern);
+      if (htmlContent.includes(pattern)) {
+        foundStaff.push(staff.name);
       }
     });
-    
-    // 2. CSS 클래스 패턴 확인 (Google Sheets 특화)
-    const cssClasses = cssClassMap[staff.color] || [];
-    cssClasses.forEach(cssClass => {
-      const classPattern = `class="${cssClass}"`;
-      if (htmlContent.includes(classPattern)) {
-        hasColor = true;
-        matchedPatterns.push(`CSS class: ${cssClass}`);
-        
-        // 특별 디버깅: 사용자가 언급한 색상들
-        if (staff.color === '#85200c' || staff.color === '#bf9000' || staff.color === '#6aa84f' || staff.color === '#0000ff') {
-          console.log(`  ✓ CSS class match found: ${cssClass} for ${staff.name} (${staff.color})`);
-        }
-      }
-    });
-    
-    // 추가: 더 유연한 CSS 클래스 매칭 (공백이나 다른 클래스와 함께 있는 경우)
-    cssClasses.forEach(cssClass => {
-      const flexiblePatterns = [
-        `class="${cssClass}"`,
-        `class="${cssClass} `,
-        `class=" ${cssClass}"`,
-        `class=" ${cssClass} `,
-        `class="${cssClass};`,
-        `class="${cssClass}>`,
-      ];
-      
-      flexiblePatterns.forEach(pattern => {
-        if (htmlContent.includes(pattern)) {
-          hasColor = true;
-          matchedPatterns.push(`Flexible CSS class: ${cssClass}`);
-          
-          // 특별 디버깅: 사용자가 언급한 색상들
-          if (staff.color === '#85200c' || staff.color === '#bf9000' || staff.color === '#6aa84f' || staff.color === '#0000ff') {
-            console.log(`  ✓ Flexible CSS class match: ${pattern} for ${staff.name} (${staff.color})`);
-          }
-        }
-      });
-    });
-    
-    // 강화된 매칭: 사용자가 언급한 특정 색상들에 대한 추가 검사
-    if (targetColors.includes(staff.color)) {
-      console.log(`=== Enhanced matching for ${staff.name} (${staff.color}) ===`);
-      
-      // 모든 가능한 CSS 클래스 패턴 확인
-      const allPossiblePatterns = [
-        ...cssClasses.map(cls => `class="${cls}"`),
-        ...cssClasses.map(cls => `class="${cls} `),
-        ...cssClasses.map(cls => `class=" ${cls}"`),
-        ...cssClasses.map(cls => `class=" ${cls} `),
-        ...cssClasses.map(cls => `class="${cls};`),
-        ...cssClasses.map(cls => `class="${cls}>`),
-      ];
-      
-      allPossiblePatterns.forEach(pattern => {
-        if (htmlContent.includes(pattern)) {
-          hasColor = true;
-          matchedPatterns.push(`Enhanced CSS class: ${pattern}`);
-          console.log(`  ✓ Enhanced match: ${pattern}`);
-        }
-      });
-      
-      // 정규식으로 더 정확한 매칭
-      cssClasses.forEach(cssClass => {
-        const regex = new RegExp(`class="[^"]*${cssClass}[^"]*"`, 'i');
-        if (regex.test(htmlContent)) {
-          hasColor = true;
-          matchedPatterns.push(`Regex CSS class: ${cssClass}`);
-          console.log(`  ✓ Regex match: ${cssClass}`);
-        }
-      });
-    }
-    
-    if (hasColor) {
-      foundStaff.push(staff.name);
-      if (DEBUG_MODE) {
-        console.log(`  ✓ Color match found for ${staff.name}: ${staff.color}`);
-        console.log(`    Matched patterns: ${matchedPatterns.join(', ')}`);
-      }
-    } else if (DEBUG_MODE) {
-      console.log(`  ✗ No color match for ${staff.name}: ${staff.color}`);
-    }
   });
-  
-  if (DEBUG_MODE) {
-    console.log(`  Final color matched staff: ${foundStaff.join(', ')}`);
-    console.log(`  =========================`);
-  }
   
   return foundStaff;
 };
 
 // 시트(탭) 목록을 반환하는 함수 (HTML 파싱 기반)
 export const getSheetTabList = async (): Promise<{ name: string; gid: string }[]> => {
+  if (!currentGoogleSheetId) {
+    throw new Error('구글 시트 URL이 설정되지 않았습니다. URL을 입력해주세요.');
+  }
+
   const timestamp = new Date().getTime();
   const urlWithCacheBuster = `${getGoogleSheetUrls().html}?t=${timestamp}`;
   const response = await fetch(urlWithCacheBuster, { method: 'GET', mode: 'cors' });
@@ -868,9 +1027,312 @@ export const getSheetTabList = async (): Promise<{ name: string; gid: string }[]
   const htmlText = await response.text();
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlText, 'text/html');
-  const tabNodes = Array.from(doc.querySelectorAll('#sheet-menu li a'));
-  return tabNodes.map(a => ({
-    name: a.textContent?.trim() || '',
-    gid: (a as HTMLAnchorElement).getAttribute('href')?.match(/gid=(\d+)/)?.[1] || ''
+  const tabNodes = Array.from(doc.querySelectorAll('#sheet-menu li'));
+  return tabNodes.map(li => ({
+    name: li.querySelector('a')?.textContent?.trim() || '',
+    gid: li.id.replace('sheet-button-', '')
   })).filter(tab => tab.name && tab.gid);
+};
+
+// Google Sheets API v4를 사용한 데이터 가져오기
+const getScheduleDataFromAPI = async (scheduleRowKeys: { [key: string]: any }, gid?: string): Promise<ScheduleData> => {
+  if (!currentGoogleSheetId) {
+    throw new Error('구글 시트 ID가 설정되지 않았습니다.');
+  }
+
+  // Google Sheets API v4 엔드포인트
+  const apiKey = 'AIzaSyBxGxO0J0J0J0J0J0J0J0J0J0J0J0J0J0'; // 실제 API 키로 교체 필요
+  const range = gid ? `Sheet1!A:Z` : 'A:Z'; // 전체 범위 가져오기
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${currentGoogleSheetId}/values/${range}?key=${apiKey}`;
+
+  if (DEBUG_MODE) {
+    console.log('API URL:', url);
+  }
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`API 요청 실패: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (DEBUG_MODE) {
+      console.log('API 응답:', data);
+    }
+
+    if (!data.values || !Array.isArray(data.values)) {
+      throw new Error('API 응답에 values가 없습니다.');
+    }
+
+    const grid = data.values as string[][];
+    
+    if (DEBUG_MODE) {
+      console.log('API로 가져온 그리드:', grid);
+    }
+
+    // 스태프 멤버 파싱
+    const staffMembers = parseStaffMembers(grid);
+
+    // 스케줄 데이터 파싱
+    const schedules: ScheduleItem[] = [];
+    let year = new Date().getFullYear();
+    let month = new Date().getMonth() + 1;
+
+    // 날짜 행 찾기
+    let dateRowIndex = -1;
+    for (let r = 0; r < grid.length; r++) {
+      const row = grid[r];
+      if (row && row.some(cell => cell && /^\d{1,2}$/.test(cell.trim()))) {
+        dateRowIndex = r;
+        break;
+      }
+    }
+
+    if (dateRowIndex >= 0) {
+      const dateRow = grid[dateRowIndex];
+      
+      if (DEBUG_MODE) {
+        console.log('날짜 행 발견:', dateRowIndex, dateRow);
+      }
+
+      // 각 날짜 열에 대해 스케줄 파싱
+      for (let col = 1; col < dateRow.length; col++) {
+        const dateStr = dateRow[col];
+        if (!dateStr || !/^\d{1,2}$/.test(dateStr.trim())) continue;
+
+        const day = parseInt(dateStr.trim());
+        if (isNaN(day) || day < 1 || day > 31) continue;
+
+        // 해당 열의 모든 행을 확인하여 스케줄 정보 수집
+        const scheduleData: any = {
+          date: new Date(year, month - 1, day),
+          schedule: '',
+          dailyMeditation: '',
+          coffeeManagement: '',
+          workSchedule: '',
+          vehicleAndOther: ''
+        };
+
+        // 날짜 행 아래의 모든 행을 확인
+        for (let r = dateRowIndex + 1; r < grid.length; r++) {
+          const row = grid[r];
+          if (!row || col >= row.length) continue;
+
+          const cellValue = row[col] || '';
+          const rowType = row[0] || '';
+
+          // 스케줄 타입에 따라 데이터 할당
+          if (scheduleRowKeys[rowType]) {
+            const key = scheduleRowKeys[rowType];
+            scheduleData[key] = cellValue;
+          }
+        }
+
+        // 스태프 정보 추출
+        const staffInDay: string[] = [];
+        staffMembers.forEach(staff => {
+          if (scheduleData.schedule.includes(staff.name) || 
+              scheduleData.workSchedule.includes(staff.name)) {
+            staffInDay.push(staff.name);
+          }
+        });
+
+        schedules.push({
+          id: `${year}-${month}-${day}`,
+          date: scheduleData.date,
+          dayOfWeek: scheduleData.date.toLocaleDateString('ko-KR', { weekday: 'long' }),
+          schedule: scheduleData.schedule,
+          dailyMeditation: scheduleData.dailyMeditation,
+          coffeeManagement: scheduleData.coffeeManagement,
+          workSchedule: scheduleData.workSchedule,
+          vehicleAndOther: scheduleData.vehicleAndOther,
+          scheduleStaff: staffInDay,
+          dailyMeditationStaff: [],
+          coffeeManagementStaff: [],
+          workScheduleStaff: staffInDay,
+          vehicleAndOtherStaff: []
+        });
+      }
+    }
+
+    if (DEBUG_MODE) {
+      console.log('API로 파싱된 스케줄:', schedules);
+    }
+
+    return {
+      year,
+      month,
+      schedules,
+      staffMembers,
+      textGrid: grid
+    };
+
+  } catch (error) {
+    console.error('API 방식 실패:', error);
+    throw error;
+  }
+};
+
+// Google Sheets CSV export를 사용한 데이터 가져오기
+const getScheduleDataFromCSV = async (scheduleRowKeys: { [key: string]: any }, gid?: string): Promise<ScheduleData> => {
+  if (!currentGoogleSheetId) {
+    throw new Error('구글 시트 ID가 설정되지 않았습니다.');
+  }
+
+  // CSV export URL 생성
+  const csvUrl = `https://docs.google.com/spreadsheets/d/e/${currentGoogleSheetId}/export?format=csv&gid=${gid || '0'}`;
+  
+  if (DEBUG_MODE) {
+    console.log('CSV URL:', csvUrl);
+  }
+
+  try {
+    const response = await fetch(csvUrl);
+    if (!response.ok) {
+      throw new Error(`CSV 요청 실패: ${response.status} ${response.statusText}`);
+    }
+
+    const csvText = await response.text();
+    
+    if (DEBUG_MODE) {
+      console.log('CSV 응답 길이:', csvText.length);
+      console.log('CSV 응답 미리보기:', csvText.substring(0, 500));
+    }
+
+    // CSV 파싱
+    const lines = csvText.split('\n');
+    const grid: string[][] = [];
+    
+    lines.forEach(line => {
+      if (line.trim()) {
+        // CSV 라인을 쉼표로 분할 (따옴표 처리 포함)
+        const row: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            row.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        
+        // 마지막 셀 추가
+        row.push(current.trim());
+        grid.push(row);
+      }
+    });
+
+    if (DEBUG_MODE) {
+      console.log('CSV로 파싱된 그리드:', grid);
+    }
+
+    // 스태프 멤버 파싱
+    const staffMembers = parseStaffMembers(grid);
+
+    // 스케줄 데이터 파싱
+    const schedules: ScheduleItem[] = [];
+    let year = new Date().getFullYear();
+    let month = new Date().getMonth() + 1;
+
+    // 날짜 행 찾기
+    let dateRowIndex = -1;
+    for (let r = 0; r < grid.length; r++) {
+      const row = grid[r];
+      if (row && row.some(cell => cell && /^\d{1,2}$/.test(cell.trim()))) {
+        dateRowIndex = r;
+        break;
+      }
+    }
+
+    if (dateRowIndex >= 0) {
+      const dateRow = grid[dateRowIndex];
+      
+      if (DEBUG_MODE) {
+        console.log('CSV에서 날짜 행 발견:', dateRowIndex, dateRow);
+      }
+
+      // 각 날짜 열에 대해 스케줄 파싱
+      for (let col = 1; col < dateRow.length; col++) {
+        const dateStr = dateRow[col];
+        if (!dateStr || !/^\d{1,2}$/.test(dateStr.trim())) continue;
+
+        const day = parseInt(dateStr.trim());
+        if (isNaN(day) || day < 1 || day > 31) continue;
+
+        // 해당 열의 모든 행을 확인하여 스케줄 정보 수집
+        const scheduleData: any = {
+          date: new Date(year, month - 1, day),
+          schedule: '',
+          dailyMeditation: '',
+          coffeeManagement: '',
+          workSchedule: '',
+          vehicleAndOther: ''
+        };
+
+        // 날짜 행 아래의 모든 행을 확인
+        for (let r = dateRowIndex + 1; r < grid.length; r++) {
+          const row = grid[r];
+          if (!row || col >= row.length) continue;
+
+          const cellValue = row[col] || '';
+          const rowType = row[0] || '';
+
+          // 스케줄 타입에 따라 데이터 할당
+          if (scheduleRowKeys[rowType]) {
+            const key = scheduleRowKeys[rowType];
+            scheduleData[key] = cellValue;
+          }
+        }
+
+        // 스태프 정보 추출
+        const staffInDay: string[] = [];
+        staffMembers.forEach(staff => {
+          if (scheduleData.schedule.includes(staff.name) || 
+              scheduleData.workSchedule.includes(staff.name)) {
+            staffInDay.push(staff.name);
+          }
+        });
+
+        schedules.push({
+          id: `${year}-${month}-${day}`,
+          date: scheduleData.date,
+          dayOfWeek: scheduleData.date.toLocaleDateString('ko-KR', { weekday: 'long' }),
+          schedule: scheduleData.schedule,
+          dailyMeditation: scheduleData.dailyMeditation,
+          coffeeManagement: scheduleData.coffeeManagement,
+          workSchedule: scheduleData.workSchedule,
+          vehicleAndOther: scheduleData.vehicleAndOther,
+          scheduleStaff: staffInDay,
+          dailyMeditationStaff: [],
+          coffeeManagementStaff: [],
+          workScheduleStaff: staffInDay,
+          vehicleAndOtherStaff: []
+        });
+      }
+    }
+  
+  if (DEBUG_MODE) {
+      console.log('CSV로 파싱된 스케줄:', schedules);
+    }
+
+    return {
+      year,
+      month,
+      schedules,
+      staffMembers,
+      textGrid: grid
+    };
+
+  } catch (error) {
+    console.error('CSV 방식 실패:', error);
+    throw error;
+  }
 }; 

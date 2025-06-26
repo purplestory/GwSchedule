@@ -30,7 +30,7 @@ import ScheduleCalendar from './components/ScheduleCalendar';
 import StaffFilter from './components/StaffFilter';
 import Statistics from './components/Statistics';
 import ThemeSelector from './components/ThemeSelector';
-import { getScheduleData, setGoogleSheetUrl as setSheetUrl, getCurrentGoogleSheetUrl } from './services/googleSheetService';
+import { getScheduleData, setGoogleSheetUrl as setSheetUrl, getCurrentGoogleSheetUrl, getSheetTabList } from './services/googleSheetService';
 import { defaultCalendarTheme, CalendarTheme } from './theme';
 import { ScheduleData } from './types';
 
@@ -55,16 +55,41 @@ function App() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [calendarTheme, setCalendarTheme] = useState<CalendarTheme>(defaultCalendarTheme);
   const [themeSelectorOpen, setThemeSelectorOpen] = useState<boolean>(false);
-  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(() => {
+    console.log('=== useState 초기화 함수 실행 ===');
+    const initialValue = false;
+    console.log('초기값 설정:', initialValue);
+    console.log('=== useState 초기화 함수 끝 ===');
+    return initialValue;
+  });
   const [googleSheetUrl, setGoogleSheetUrl] = useState<string>('');
+  const [sheetTabs, setSheetTabs] = useState<{ name: string; gid: string }[]>([]);
+  const [sheetTabModalOpen, setSheetTabModalOpen] = useState(false);
+  const [selectedSheetTab, setSelectedSheetTab] = useState<string>('');
 
-  // localStorage에서 저장된 URL 불러오기
+  // 앱 시작 시 서버에서 구글시트 URL 불러오기
   useEffect(() => {
-    const savedUrl = localStorage.getItem('googleSheetUrl');
-    if (savedUrl) {
-      setGoogleSheetUrl(savedUrl);
-    }
+    fetch('/api/sheet-url')
+      .then(res => res.json())
+      .then(data => {
+        if (data.url) {
+          setGoogleSheetUrl(data.url);
+          setSheetUrl(data.url);
+        }
+      })
+      .catch(err => {
+        console.error('sheet-url fetch error:', err);
+      });
   }, []);
+
+  // settingsOpen 상태 변화 추적 (모든 변화를 로그로 출력)
+  useEffect(() => {
+    console.log('=== settingsOpen 상태 변화 감지 ===');
+    console.log('settingsOpen 상태 변화:', settingsOpen);
+    console.log('settingsOpen 타입:', typeof settingsOpen);
+    console.log('변화 위치:', new Error().stack?.split('\n')[2]?.trim());
+    console.log('=== 상태 변화 감지 끝 ===');
+  }, [settingsOpen]);
 
   const getUpdateInterval = useCallback(() => {
     const hour = new Date().getHours();
@@ -136,35 +161,126 @@ function App() {
     fetchData(true);
   };
 
+  // URL 저장 버튼 클릭 시 서버에 저장
+  const handleSaveGoogleSheetUrl = async () => {
+    if (googleSheetUrl.trim()) {
+      // 서버에 저장
+      const res = await fetch('/api/sheet-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: googleSheetUrl }),
+      });
+      if (res.ok) {
+        setSheetUrl(googleSheetUrl);
+        handleSetSettingsOpen(false);
+        setIsLoading(true);
+        setError(null);
+        try {
+          const data = await getScheduleData();
+          setScheduleData(data);
+          setError(null);
+        } catch (e: any) {
+          setError(e.message || '스케줄 데이터를 불러오지 못했습니다.');
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        alert('서버에 URL저장을 실패했습니다.');
+      }
+    } else {
+      alert('URL을 입력해주세요.');
+    }
+  };
+
+  // setSettingsOpen 함수 래핑
+  const handleSetSettingsOpen = (value: boolean) => {
+    console.log('=== handleSetSettingsOpen 호출 ===');
+    console.log('호출 위치:', new Error().stack?.split('\n')[2]?.trim());
+    console.log('setSettingsOpen 호출됨:', value);
+    console.log('호출 전 settingsOpen 값:', settingsOpen);
+    setSettingsOpen(value);
+    console.log('setSettingsOpen 호출 후 즉시 확인:', settingsOpen);
+    console.log('=== handleSetSettingsOpen 끝 ===');
+  };
+
+  let mainContent = null;
   if (isLoading) {
-    return (
+    mainContent = (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column' }}>
         <Typography variant="h6" sx={{ mb: 2, color: calendarTheme.cell.color }}>스케줄 데이터를 불러오는 중...</Typography>
         <Typography variant="body2" sx={{ color: calendarTheme.cell.color }}>Google Sheets에서 데이터를 가져오고 있습니다.</Typography>
       </Box>
     );
-  }
-
-  if (error) {
-    return (
+  } else if (error) {
+    const isNoUrlError = error.includes('구글 시트 URL이 설정되지 않았습니다');
+    mainContent = (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column' }}>
         <Typography variant="h6" color="error" sx={{ mb: 2 }}>오류가 발생했습니다</Typography>
         <Typography variant="body1" sx={{ mb: 2, color: calendarTheme.cell.color }}>{error}</Typography>
-        <Button variant="contained" onClick={() => window.location.reload()}>
-          페이지 새로고침
-        </Button>
+        {isNoUrlError ? (
+          <Button variant="contained" onClick={() => handleSetSettingsOpen(true)}>
+            구글 시트 URL 입력
+          </Button>
+        ) : (
+          <Button variant="contained" onClick={() => window.location.reload()}>
+            페이지 새로고침
+          </Button>
+        )}
       </Box>
     );
-  }
-
-  if (!scheduleData) {
-    return (
+  } else if (!scheduleData) {
+    mainContent = (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <Typography sx={{ color: calendarTheme.cell.color }}>스케줄 데이터가 없습니다.</Typography>
       </Box>
     );
   }
 
+  if (mainContent) {
+    return (
+      <ThemeProvider theme={theme}>
+        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ko}>
+          <CssBaseline />
+          {mainContent}
+          <Dialog open={settingsOpen} onClose={() => handleSetSettingsOpen(false)} maxWidth="sm" fullWidth>
+            <DialogTitle>구글 스프레드시트 URL 설정</DialogTitle>
+            <DialogContent>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                파일 &gt; 공유 &gt; <strong>웹에 게시</strong> 메뉴를 선택 후<br />
+                <strong>전체 문서</strong> 풀다운 메뉴를 눌러서 공유를 원하는 월을 선택하고,<br />
+                오른쪽 풀다운 메뉴에서 <strong>웹페이지</strong>를 선택한 뒤<br />
+                <strong>게시</strong> 버튼을 눌러서 나오는 주소를 복사해 아래 URL 입력창에 붙여넣으세요.<br />
+                <br />
+                예시: https://docs.google.com/spreadsheets/d/e/.../pubhtml?gid=518662115&single=true
+              </Typography>
+              <TextField
+                autoFocus
+                margin="dense"
+                id="googleSheetUrl"
+                label="구글 스프레드시트 URL"
+                type="url"
+                fullWidth
+                value={googleSheetUrl}
+                onChange={(e) => setGoogleSheetUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/e/.../pubhtml?gid=...&single=true"
+                helperText="웹에 게시된 해당 월(시트) URL을 입력하세요"
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => handleSetSettingsOpen(false)} color="primary">
+                취소
+              </Button>
+              <Button onClick={handleSaveGoogleSheetUrl} color="primary">
+                저장
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </LocalizationProvider>
+      </ThemeProvider>
+    );
+  }
+
+  if (!scheduleData) return null;
   const { schedules, staffMembers, year, month } = scheduleData;
   const currentMonth = new Date(year, month - 1, 1);
 
@@ -263,7 +379,10 @@ function App() {
                     transition: 'all 0.2s',
                     '&:hover': { boxShadow: 4, bgcolor: 'primary.light' }
                   }}
-                  onClick={() => setSettingsOpen(true)}
+                  onClick={() => {
+                    console.log('설정 버튼 클릭됨');
+                    handleSetSettingsOpen(true);
+                  }}
                   title="설정"
                 />
               </Box>
@@ -331,58 +450,6 @@ function App() {
           open={themeSelectorOpen}
           onClose={() => setThemeSelectorOpen(false)}
         />
-        <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>구글 스프레드시트 URL 설정</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              구글 스프레드시트를 공개하려면:
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1, pl: 2 }}>
-              1. 구글 스프레드시트에서 <strong>파일</strong> → <strong>공유</strong> → <strong>전체문서</strong> 클릭
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1, pl: 2 }}>
-              2. <strong>웹페이지로</strong> 선택 후 <strong>게시 시작</strong> 버튼 클릭
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, pl: 2 }}>
-              3. 생성된 공개 URL을 아래에 입력하세요
-            </Typography>
-            <TextField
-              autoFocus
-              margin="dense"
-              id="googleSheetUrl"
-              label="구글 스프레드시트 URL"
-              type="url"
-              fullWidth
-              value={googleSheetUrl}
-              onChange={(e) => setGoogleSheetUrl(e.target.value)}
-              placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=html"
-              helperText="웹에 게시된 공개 URL을 입력하세요"
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setSettingsOpen(false)} color="primary">
-              취소
-            </Button>
-            <Button onClick={() => {
-              // Handle the submission of the Google Sheet URL
-              if (googleSheetUrl.trim()) {
-                const success = setSheetUrl(googleSheetUrl);
-                if (success) {
-                  localStorage.setItem('googleSheetUrl', googleSheetUrl);
-                  // 새로운 URL로 데이터 다시 가져오기
-                  fetchData(true);
-                  setSettingsOpen(false);
-                } else {
-                  alert('올바른 구글 스프레드시트 URL을 입력해주세요.');
-                }
-              } else {
-                alert('URL을 입력해주세요.');
-              }
-            }} color="primary">
-              저장
-            </Button>
-          </DialogActions>
-        </Dialog>
       </LocalizationProvider>
     </ThemeProvider>
   );

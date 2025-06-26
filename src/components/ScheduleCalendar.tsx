@@ -300,15 +300,15 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   };
 
   const categoryLabelTdStyle = (bgColor?: string): React.CSSProperties => ({
-    background: '#f2f2f2',
-    border: '1px solid #e0e0e0',
+    background: calendarTheme?.labelHeader.background || '#f5f5f5',
+    border: isMobile ? `1px solid ${calendarTheme?.cell.border || '#999'}` : `1px solid ${calendarTheme?.cell.border || '#000'}`,
     fontWeight: 700,
     textAlign: 'center',
     width: isMobile ? 40 : 80,
     minWidth: 30,
     maxWidth: 120,
     fontSize: isMobile ? '0.4rem' : (calendarTheme?.table.fontSize || '0.8rem'),
-    color: '#000',
+    color: calendarTheme?.header.color || '#000',
     height: isMobile ? '30px' : '40px',
     boxSizing: 'border-box',
     padding: isMobile ? '2px' : '6px',
@@ -331,7 +331,17 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
             <tr>
               <th style={thStyle}>요일</th>
               {dayHeaders.map((day, idx) => (
-                <th key={day} style={{ ...thStyle, color: idx === 0 ? (calendarTheme?.weekend.color || theme.palette.error.main) : undefined }}>{day}</th>
+                <th
+                  key={day}
+                  style={{
+                    ...thStyle,
+                    color: idx === 0
+                      ? (calendarTheme?.weekend.color || theme.palette.error.main)
+                      : (calendarTheme?.header.color || '#fff')
+                  }}
+                >
+                  {day}
+                </th>
               ))}
             </tr>
           </thead>
@@ -363,7 +373,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                               ? '#fff'
                               : (getDay(day) === 0 || holidayDates.includes(format(day, 'yyyy-MM-dd'))
                                 ? 'rgb(255,0,0)'
-                                : '#222'),
+                                : (calendarTheme?.cell.color || '#222')),
                             background: isToday(day) ? '#ff0000' : undefined,
                             borderRadius: isToday(day) ? '50%' : undefined,
                             width: isToday(day) ? 36 : undefined,
@@ -376,7 +386,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
                           {/* 공휴일명 표시 */}
                           {holidayDates.includes(format(day, 'yyyy-MM-dd')) && (
                             <span style={{
-                              fontSize: isMobile ? '0.55rem' : '0.7rem',
+                              fontSize: isMobile ? '0.4rem' : '0.7rem',
                               color: 'rgb(255,0,0)',
                               marginTop: 2,
                               fontWeight: 500,
