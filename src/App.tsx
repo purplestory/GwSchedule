@@ -351,82 +351,130 @@ function App() {
               )}
               {/* 오른쪽 Chip 버튼 */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1, pr: 2 }}>
-                <IconButton 
-                  color="inherit" 
-                  onClick={handleManualRefresh}
-                  disabled={isRefreshing}
-                  sx={{ 
-                    borderRadius: '16px',
-                    '&:hover': { bgcolor: 'action.hover' }
-                  }}
-                  title="데이터 새로고침"
-                >
-                  <Refresh sx={{ 
-                    fontSize: 18, 
-                    animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
-                    '@keyframes spin': {
-                      '0%': { transform: 'rotate(0deg)' },
-                      '100%': { transform: 'rotate(360deg)' }
-                    }
-                  }} />
-                </IconButton>
-                <Chip
-                  icon={<Person sx={{ fontSize: 18 }} />}
-                  label="이니셜"
-                  color={showInitials ? 'primary' : 'default'}
-                  variant={showInitials ? 'filled' : 'outlined'}
-                  size="small"
-                  sx={{
-                    borderRadius: '16px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    boxShadow: showInitials ? 2 : 0,
-                    bgcolor: showInitials ? 'primary.main' : 'background.paper',
-                    color: showInitials ? '#fff' : 'text.primary',
-                    transition: 'all 0.2s',
-                    '&:hover': { boxShadow: 4, bgcolor: 'primary.light' }
-                  }}
-                  onClick={() => setShowInitials(v => !v)}
-                  title="이니셜 표시 토글"
-                />
-                <Chip
-                  icon={<Palette sx={{ fontSize: 18 }} />}
-                  label="테마"
-                  color="primary"
-                  variant={themeSelectorOpen ? 'filled' : 'outlined'}
-                  size="small"
-                  sx={{
-                    borderRadius: '16px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    boxShadow: themeSelectorOpen ? 2 : 0,
-                    bgcolor: themeSelectorOpen ? 'primary.main' : 'background.paper',
-                    color: themeSelectorOpen ? '#fff' : 'text.primary',
-                    transition: 'all 0.2s',
-                    '&:hover': { boxShadow: 4, bgcolor: 'primary.light' }
-                  }}
-                  onClick={() => setThemeSelectorOpen(true)}
-                  title="테마 변경"
-                />
-                <Chip
-                  icon={<Settings sx={{ fontSize: 18 }} />}
-                  label="설정"
-                  color="primary"
-                  variant={settingsOpen ? 'filled' : 'outlined'}
-                  size="small"
-                  sx={{
-                    borderRadius: '16px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    boxShadow: settingsOpen ? 2 : 0,
-                    bgcolor: settingsOpen ? 'primary.main' : 'background.paper',
-                    color: settingsOpen ? '#fff' : 'text.primary',
-                    transition: 'all 0.2s',
-                    '&:hover': { boxShadow: 4, bgcolor: 'primary.light' }
-                  }}
-                  onClick={() => handleSetSettingsOpen(true)}
-                  title="설정"
-                />
+                {isMobile ? (
+                  <>
+                    <IconButton 
+                      color="inherit" 
+                      onClick={handleManualRefresh}
+                      disabled={isRefreshing}
+                      sx={{ borderRadius: '16px' }}
+                      title="데이터 새로고침"
+                    >
+                      <Refresh sx={{ fontSize: 20, animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
+                        '@keyframes spin': {
+                          '0%': { transform: 'rotate(0deg)' },
+                          '100%': { transform: 'rotate(360deg)' }
+                        }
+                      }} />
+                    </IconButton>
+                    <IconButton
+                      color={showFilter ? 'primary' : 'default'}
+                      onClick={() => setShowFilter(v => !v)}
+                      sx={{ borderRadius: '16px' }}
+                      title="직원 필터"
+                    >
+                      <FilterList sx={{ fontSize: 20 }} />
+                    </IconButton>
+                    <IconButton
+                      color={showInitials ? 'primary' : 'default'}
+                      onClick={() => setShowInitials(v => !v)}
+                      sx={{ borderRadius: '16px' }}
+                      title="이니셜 표시 토글"
+                    >
+                      <Person sx={{ fontSize: 20 }} />
+                    </IconButton>
+                    <IconButton
+                      color={themeSelectorOpen ? 'primary' : 'default'}
+                      onClick={() => setThemeSelectorOpen(true)}
+                      sx={{ borderRadius: '16px' }}
+                      title="테마 변경"
+                    >
+                      <Palette sx={{ fontSize: 20 }} />
+                    </IconButton>
+                    <IconButton
+                      color={settingsOpen ? 'primary' : 'default'}
+                      onClick={() => handleSetSettingsOpen(true)}
+                      sx={{ borderRadius: '16px' }}
+                      title="설정"
+                    >
+                      <Settings sx={{ fontSize: 20 }} />
+                    </IconButton>
+                  </>
+                ) : (
+                  <>
+                    <IconButton 
+                      color="inherit" 
+                      onClick={handleManualRefresh}
+                      disabled={isRefreshing}
+                      sx={{ borderRadius: '16px' }}
+                      title="데이터 새로고침"
+                    >
+                      <Refresh sx={{ fontSize: 18, animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
+                        '@keyframes spin': {
+                          '0%': { transform: 'rotate(0deg)' },
+                          '100%': { transform: 'rotate(360deg)' }
+                        }
+                      }} />
+                    </IconButton>
+                    <Chip
+                      icon={<Person sx={{ fontSize: 18 }} />}
+                      label="이니셜"
+                      color={showInitials ? 'primary' : 'default'}
+                      variant={showInitials ? 'filled' : 'outlined'}
+                      size="small"
+                      sx={{
+                        borderRadius: '16px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: showInitials ? 2 : 0,
+                        bgcolor: showInitials ? 'primary.main' : 'background.paper',
+                        color: showInitials ? '#fff' : 'text.primary',
+                        transition: 'all 0.2s',
+                        '&:hover': { boxShadow: 4, bgcolor: 'primary.light' }
+                      }}
+                      onClick={() => setShowInitials(v => !v)}
+                      title="이니셜 표시 토글"
+                    />
+                    <Chip
+                      icon={<Palette sx={{ fontSize: 18 }} />}
+                      label="테마"
+                      color="primary"
+                      variant={themeSelectorOpen ? 'filled' : 'outlined'}
+                      size="small"
+                      sx={{
+                        borderRadius: '16px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: themeSelectorOpen ? 2 : 0,
+                        bgcolor: themeSelectorOpen ? 'primary.main' : 'background.paper',
+                        color: themeSelectorOpen ? '#fff' : 'text.primary',
+                        transition: 'all 0.2s',
+                        '&:hover': { boxShadow: 4, bgcolor: 'primary.light' }
+                      }}
+                      onClick={() => setThemeSelectorOpen(true)}
+                      title="테마 변경"
+                    />
+                    <Chip
+                      icon={<Settings sx={{ fontSize: 18 }} />}
+                      label="설정"
+                      color="primary"
+                      variant={settingsOpen ? 'filled' : 'outlined'}
+                      size="small"
+                      sx={{
+                        borderRadius: '16px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: settingsOpen ? 2 : 0,
+                        bgcolor: settingsOpen ? 'primary.main' : 'background.paper',
+                        color: settingsOpen ? '#fff' : 'text.primary',
+                        transition: 'all 0.2s',
+                        '&:hover': { boxShadow: 4, bgcolor: 'primary.light' }
+                      }}
+                      onClick={() => handleSetSettingsOpen(true)}
+                      title="설정"
+                    />
+                  </>
+                )}
               </Box>
               <IconButton color="inherit" onClick={toggleFullscreen} sx={{ ml: 1, display: { xs: 'none', sm: 'flex' } }}>
                 {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
